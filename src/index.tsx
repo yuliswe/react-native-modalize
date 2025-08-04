@@ -80,7 +80,7 @@ const DEFAULT_AVOID_KEYBOARD_LIKE_IOS = Platform.select({
   default: true,
 });
 
-const ModalizeBase = (
+const _ModalizeBase = (
   {
     // Refs
     contentRef,
@@ -990,5 +990,5 @@ const ModalizeBase = (
 export type ModalizeProps = IProps;
 export type Modalize = IHandles;
 
-export const Modalize = React.forwardRef(ModalizeBase);
+export const Modalize = React.memo(React.forwardRef(_ModalizeBase));
 export * from './utils/use-modalize';
