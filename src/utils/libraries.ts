@@ -15,5 +15,5 @@ export const isRNGH2 = (): boolean => {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const { version } = require('react-native-gesture-handler/package.json');
 
-  return parseInt(version, 10) >= 2;
+  return parseInt(version as string, 10) >= 2;
 };
