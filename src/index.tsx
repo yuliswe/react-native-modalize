@@ -48,6 +48,71 @@ type ActiveGestureHandlerName =
   | 'tap-overlay'
   | null;
 
+const renderElement = (Element: React.ReactNode): JSX.Element =>
+  typeof Element === 'function' ? Element() : (Element as JSX.Element);
+
+interface ModalizeComponentProps {
+  component: React.ReactNode;
+  name: 'header' | 'footer' | 'floating';
+  panGestureEnabled: boolean;
+  panGestureComponentEnabled: boolean;
+  handleGestureEvent: any;
+  handleComponent: (event: PanGestureHandlerStateChangeEvent) => void;
+  handleComponentLayout: (
+    event: LayoutChangeEvent,
+    name: 'header' | 'footer' | 'floating',
+    absolute: boolean,
+  ) => void;
+}
+
+const ModalizeComponent: React.FC<ModalizeComponentProps> = ({
+  component,
+  name,
+  panGestureEnabled,
+  panGestureComponentEnabled,
+  handleGestureEvent,
+  handleComponent,
+  handleComponentLayout,
+}) => {
+  const renderElement = (Element: React.ReactNode): JSX.Element =>
+    typeof Element === 'function' ? Element() : (Element as JSX.Element);
+
+  if (!component) {
+    return null;
+  }
+
+  const tag = renderElement(component);
+
+  /**
+   * Nesting Touchable/ScrollView components with RNGH PanGestureHandler cancels the inner events.
+   * Until a better solution lands in RNGH, I will disable the PanGestureHandler for Android only,
+   * so inner touchable/gestures are working from the custom components you can pass in.
+   */
+  if (isAndroid && !panGestureComponentEnabled) {
+    return tag;
+  }
+
+  const obj: ViewStyle = StyleSheet.flatten(tag?.props?.style);
+  const absolute: boolean = obj?.position === 'absolute';
+  const zIndex: number | undefined = obj?.zIndex;
+
+  return (
+    <PanGestureHandler
+      enabled={panGestureEnabled}
+      shouldCancelWhenOutside={false}
+      onGestureEvent={handleGestureEvent}
+      onHandlerStateChange={handleComponent}
+    >
+      <Animated.View
+        style={{ zIndex }}
+        onLayout={(e: LayoutChangeEvent): void => handleComponentLayout(e, name, absolute)}
+      >
+        {tag}
+      </Animated.View>
+    </PanGestureHandler>
+  );
+};
+
 const AnimatedKeyboardAvoidingView = Animated.createAnimatedComponent(KeyboardAvoidingView);
 /**
  * When scrolling, it happens than beginScrollYValue is not always equal to 0 (top of the ScrollView).
@@ -726,49 +791,6 @@ const ModalizeBase = (
     );
   };
 
-  const renderElement = (Element: React.ReactNode): JSX.Element =>
-    typeof Element === 'function' ? Element() : (Element as JSX.Element);
-
-  const renderComponent = (
-    component: React.ReactNode,
-    name: 'header' | 'footer' | 'floating',
-  ): JSX.Element | null => {
-    if (!component) {
-      return null;
-    }
-
-    const tag = renderElement(component);
-
-    /**
-     * Nesting Touchable/ScrollView components with RNGH PanGestureHandler cancels the inner events.
-     * Until a better solution lands in RNGH, I will disable the PanGestureHandler for Android only,
-     * so inner touchable/gestures are working from the custom components you can pass in.
-     */
-    if (isAndroid && !panGestureComponentEnabled) {
-      return tag;
-    }
-
-    const obj: ViewStyle = StyleSheet.flatten(tag?.props?.style);
-    const absolute: boolean = obj?.position === 'absolute';
-    const zIndex: number | undefined = obj?.zIndex;
-
-    return (
-      <PanGestureHandler
-        enabled={panGestureEnabled}
-        shouldCancelWhenOutside={false}
-        onGestureEvent={handleGestureEvent}
-        onHandlerStateChange={handleComponent}
-      >
-        <Animated.View
-          style={{ zIndex }}
-          onLayout={(e: LayoutChangeEvent): void => handleComponentLayout(e, name, absolute)}
-        >
-          {tag}
-        </Animated.View>
-      </PanGestureHandler>
-    );
-  };
-
   const renderChildren = (): JSX.Element => {
     const style = adjustToContentHeight ? s.content__adjustHeight : s.content__container;
     const minDist = isRNGH2() ? undefined : ACTIVATED;
@@ -1031,9 +1053,25 @@ const ModalizeBase = (
           {showContent && (
             <AnimatedKeyboardAvoidingView {...keyboardAvoidingViewProps}>
               {renderHandle()}
-              {renderComponent(HeaderComponent, 'header')}
+              <ModalizeComponent
+                component={HeaderComponent}
+                name="header"
+                panGestureEnabled={panGestureEnabled}
+                panGestureComponentEnabled={panGestureComponentEnabled}
+                handleGestureEvent={handleGestureEvent}
+                handleComponent={handleComponent}
+                handleComponentLayout={handleComponentLayout}
+              />
               {renderChildren()}
-              {renderComponent(FooterComponent, 'footer')}
+              <ModalizeComponent
+                component={FooterComponent}
+                name="footer"
+                panGestureEnabled={panGestureEnabled}
+                panGestureComponentEnabled={panGestureComponentEnabled}
+                handleGestureEvent={handleGestureEvent}
+                handleComponent={handleComponent}
+                handleComponentLayout={handleComponentLayout}
+              />
             </AnimatedKeyboardAvoidingView>
           )}
 
@@ -1041,7 +1079,15 @@ const ModalizeBase = (
         </View>
       </TapGestureHandler>
 
-      {renderComponent(FloatingComponent, 'floating')}
+      <ModalizeComponent
+        component={FloatingComponent}
+        name="floating"
+        panGestureEnabled={panGestureEnabled}
+        panGestureComponentEnabled={panGestureComponentEnabled}
+        handleGestureEvent={handleGestureEvent}
+        handleComponent={handleComponent}
+        handleComponentLayout={handleComponentLayout}
+      />
     </View>
   );
 
