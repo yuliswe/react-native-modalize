@@ -14,7 +14,7 @@ import { composeRefs } from '../utils/compose-refs';
 import { isIos } from '../utils/devices';
 import { isRNGH2 } from '../utils/libraries';
 
-const ACTIVATED = 200;
+const ACTIVATED = 20;
 
 const renderElement = (Element: React.ReactNode): JSX.Element =>
   typeof Element === 'function' ? Element() : (Element as JSX.Element);

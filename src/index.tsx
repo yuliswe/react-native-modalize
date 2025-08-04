@@ -518,10 +518,10 @@ const _ModalizeBase = (
         // Track active gesture handler
         if (state === State.ACTIVE) {
           activeGestureRef.current[handlerName] = true;
-          // console.log(`🔵 Gesture ACTIVE: ${handlerName}`, activeGestureRef.current);
+          // jconsole.log(`🔵 Gesture ACTIVE: ${handlerName}`, activeGestureRef.current);
         } else if (state === State.END || state === State.CANCELLED || state === State.FAILED) {
           activeGestureRef.current[handlerName] = false;
-          // console.log(`🔴 Gesture ENDED: ${handlerName}`, activeGestureRef.current);
+          // jconsole.log(`🔴 Gesture ENDED: ${handlerName}`, activeGestureRef.current);
         }
 
         // We make sure to reset the value if we are dragging from the children
@@ -543,7 +543,7 @@ const _ModalizeBase = (
               ? beginScrollYValue > 0
               : beginScrollYValue > 0 || negativeReverseScroll)
           ) {
-            // console.log('🔴 setCancelClose(true)');
+            // jconsole.log('🔴 setCancelClose(true)');
             setCancelClose(true);
             translateY.setValue(0);
             dragY.setValue(0);
@@ -702,10 +702,10 @@ const _ModalizeBase = (
       // Track active gesture handler
       if (state === State.ACTIVE) {
         activeGestureRef.current['pan-component'] = true;
-        // console.log(`🔵 Gesture ACTIVE: pan-component`, activeGestureRef.current);
+        // jconsole.log(`🔵 Gesture ACTIVE: pan-component`, activeGestureRef.current);
       } else if (state === State.END || state === State.CANCELLED || state === State.FAILED) {
         activeGestureRef.current['pan-component'] = false;
-        // console.log(`🔴 Gesture ENDED: pan-component`, activeGestureRef.current);
+        // jconsole.log(`🔴 Gesture ENDED: pan-component`, activeGestureRef.current);
       }
 
       // If we drag from the HeaderComponent/FooterComponent/FloatingComponent we allow the translation animation
