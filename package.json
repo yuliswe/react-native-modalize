@@ -8,6 +8,9 @@
     "access": "public",
     "registry": "https://npm.pkg.github.com"
   },
+  "files": [
+    "./lib"
+  ],
   "scripts": {
     "build": "rm -rf ./lib/ && mkdir -p ./lib/ && npx yarn lint && tsc",
     "lint": "eslint 'src/**/*.ts?(x)' && prettier --list-different \"**/*.{json,md,js,jsx,ts,tsx}\"",
