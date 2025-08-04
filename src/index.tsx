@@ -31,14 +31,14 @@ import {
 
 import { Handle } from './components/Handle';
 import { HeaderAndFooter } from './components/HeaderAndFooter';
+import { ModalizeContent } from './components/ModalizeContent';
 import { Overlay } from './components/Overlay';
 import { IHandles, IProps, TClose, TOpen, TPosition } from './options';
 import s from './styles';
-import { composeRefs } from './utils/compose-refs';
-import { isAndroid, isIos, isIphoneX } from './utils/devices';
+import { isAndroid, isIphoneX } from './utils/devices';
 import { getSpringConfig } from './utils/get-spring-config';
 import { invariant } from './utils/invariant';
-import { isBelowRN65, isRNGH2 } from './utils/libraries';
+import { isBelowRN65 } from './utils/libraries';
 import { useDimensions } from './utils/use-dimensions';
 
 type ActiveGestureHandlerName =
@@ -48,9 +48,6 @@ type ActiveGestureHandlerName =
   | 'tap-overlay'
   | null;
 
-const renderElement = (Element: React.ReactNode): JSX.Element =>
-  typeof Element === 'function' ? Element() : (Element as JSX.Element);
-
 const AnimatedKeyboardAvoidingView = Animated.createAnimatedComponent(KeyboardAvoidingView);
 /**
  * When scrolling, it happens than beginScrollYValue is not always equal to 0 (top of the ScrollView).
@@ -59,7 +56,6 @@ const AnimatedKeyboardAvoidingView = Animated.createAnimatedComponent(KeyboardAv
  */
 const SCROLL_THRESHOLD = -4;
 const USE_NATIVE_DRIVER = true;
-const ACTIVATED = 200;
 const PAN_DURATION = 150;
 
 // Memoized constants
@@ -761,99 +757,6 @@ const ModalizeBase = (
     [panGestureAnimatedValue, alwaysOpen, snapPoint, endHeight, modalPosition],
   );
 
-  const renderChildren = useCallback((): JSX.Element => {
-    const style = adjustToContentHeight ? s.content__adjustHeight : s.content__container;
-    const minDist = isRNGH2() ? undefined : ACTIVATED;
-
-    // Inlined renderContent logic
-    const keyboardDismissMode:
-      | Animated.Value
-      | Animated.AnimatedInterpolation
-      | 'interactive'
-      | 'on-drag' = isIos ? 'interactive' : 'on-drag';
-    const passedOnProps = flatListProps ?? sectionListProps ?? scrollViewProps;
-    // We allow overwrites when the props (bounces, scrollEnabled) are set to false, when true we use Modalize's core behavior
-    const bounces = !isScrollAtTop && (passedOnProps?.bounces ?? enableBounces);
-    const scrollEnabled = passedOnProps?.scrollEnabled ?? (keyboardToggle || !disableScroll);
-    const scrollEventThrottle = passedOnProps?.scrollEventThrottle || 16;
-    // const onScrollBeginDrag = passedOnProps?.onScrollBeginDrag as (
-    //   event: NativeSyntheticEvent<NativeScrollEvent>,
-    // ) => void | undefined;
-
-    const opts = {
-      ref: composeRefs(contentViewRef, contentRef) as React.RefObject<any>,
-      bounces,
-      // onScrollBeginDrag: Animated.event([{ nativeEvent: { contentOffset: { y: beginScrollY } } }], {
-      //   useNativeDriver: USE_NATIVE_DRIVER,
-      //   listener: onScrollBeginDrag,
-      // }),
-      scrollEventThrottle,
-      onLayout: handleContentLayout,
-      scrollEnabled: scrollEnabled,
-      keyboardDismissMode,
-      onScroll: handleScroll,
-      // Gesture handler props for scrollable components
-      waitFor: tapGestureModalizeRef,
-      simultaneousHandlers: [panGestureChildrenRef],
-    };
-
-    let contentElement: JSX.Element;
-
-    if (flatListProps) {
-      contentElement = <FlatList {...flatListProps} {...opts} />;
-    } else if (sectionListProps) {
-      contentElement = <SectionList {...sectionListProps} {...opts} />;
-    } else if (customRenderer) {
-      const tag = renderElement(customRenderer);
-      contentElement = React.cloneElement(tag, { ...opts });
-    } else {
-      contentElement = (
-        <ScrollView {...scrollViewProps} {...opts}>
-          {children}
-        </ScrollView>
-      );
-    }
-
-    return (
-      <PanGestureHandler
-        ref={panGestureChildrenRef}
-        enabled={panGestureEnabled}
-        simultaneousHandlers={[contentViewRef, tapGestureModalizeRef]}
-        shouldCancelWhenOutside={false}
-        onGestureEvent={handleGestureEvent}
-        minDist={minDist}
-        activeOffsetY={ACTIVATED}
-        activeOffsetX={ACTIVATED}
-        onHandlerStateChange={handlePanChildrenStateChange}
-      >
-        <Animated.View style={[style, childrenStyle]}>
-          {/* <NativeViewGestureHandler
-            ref={nativeViewChildrenRef}
-            waitFor={tapGestureModalizeRef}
-            simultaneousHandlers={panGestureChildrenRef}
-          > */}
-          {contentElement}
-          {/* </NativeViewGestureHandler> */}
-        </Animated.View>
-      </PanGestureHandler>
-    );
-  }, [
-    adjustToContentHeight,
-    childrenStyle,
-    contentRef,
-    customRenderer,
-    flatListProps,
-    sectionListProps,
-    scrollViewProps,
-    children,
-    handleContentLayout,
-    handleScroll,
-    panGestureChildrenRef,
-    panGestureEnabled,
-    tapGestureModalizeRef,
-    contentViewRef,
-  ]);
-
   React.useImperativeHandle(ref, () => ({
     open(dest?: TOpen): void {
       if (onOpen) {
@@ -989,7 +892,29 @@ const ModalizeBase = (
                 handlePanStateChange={handlePanStateChange}
                 handleComponentLayout={handleComponentLayout}
               />
-              {renderChildren()}
+              <ModalizeContent
+                scrollViewProps={scrollViewProps}
+                flatListProps={flatListProps}
+                sectionListProps={sectionListProps}
+                customRenderer={customRenderer}
+                childrenStyle={childrenStyle}
+                adjustToContentHeight={adjustToContentHeight}
+                contentRef={contentRef}
+                contentViewRef={contentViewRef}
+                panGestureChildrenRef={panGestureChildrenRef}
+                tapGestureModalizeRef={tapGestureModalizeRef}
+                handleContentLayout={handleContentLayout}
+                handleScroll={handleScroll}
+                handleGestureEvent={handleGestureEvent}
+                handlePanChildrenStateChange={handlePanChildrenStateChange}
+                enableBounces={enableBounces}
+                isScrollAtTop={isScrollAtTop}
+                keyboardToggle={keyboardToggle}
+                disableScroll={disableScroll}
+                panGestureEnabled={panGestureEnabled}
+              >
+                {children}
+              </ModalizeContent>
               <HeaderAndFooter
                 component={FooterComponent}
                 name="footer"
