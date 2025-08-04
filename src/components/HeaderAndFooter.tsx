@@ -21,7 +21,7 @@ interface HeaderAndFooterProps {
 const renderElement = (Element: React.ReactNode): JSX.Element =>
   typeof Element === 'function' ? Element() : (Element as JSX.Element);
 
-export const HeaderAndFooter: React.FC<HeaderAndFooterProps> = ({
+function _HeaderAndFooter({
   component,
   name,
   panGestureEnabled,
@@ -29,7 +29,7 @@ export const HeaderAndFooter: React.FC<HeaderAndFooterProps> = ({
   handleGestureEvent,
   handlePanStateChange,
   handleComponentLayout,
-}) => {
+}: HeaderAndFooterProps) {
   if (!component) {
     return null;
   }
@@ -64,4 +64,6 @@ export const HeaderAndFooter: React.FC<HeaderAndFooterProps> = ({
       </Animated.View>
     </PanGestureHandler>
   );
-};
+}
+
+export const HeaderAndFooter = React.memo(_HeaderAndFooter);

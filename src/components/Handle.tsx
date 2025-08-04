@@ -15,7 +15,7 @@ interface HandleProps {
   handlePanStateChange: (event: PanGestureHandlerStateChangeEvent) => void;
 }
 
-export const Handle: React.FC<HandleProps> = ({
+function _Handle({
   withHandle,
   handlePosition,
   handleStyle,
@@ -23,7 +23,7 @@ export const Handle: React.FC<HandleProps> = ({
   tapGestureModalizeRef,
   handleGestureEvent,
   handlePanStateChange,
-}) => {
+}: HandleProps) {
   const handleStyles: (TStyle | undefined)[] = [s.handle];
   const shapeStyles: (TStyle | undefined)[] = [s.handle__shape, handleStyle];
   const isHandleOutside = handlePosition === 'outside';
@@ -50,4 +50,6 @@ export const Handle: React.FC<HandleProps> = ({
       </Animated.View>
     </PanGestureHandler>
   );
-};
+}
+
+export const Handle = React.memo(_Handle);

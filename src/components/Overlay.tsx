@@ -33,7 +33,7 @@ interface OverlayProps {
   >;
 }
 
-export const Overlay: React.FC<OverlayProps> = ({
+function _Overlay({
   withOverlay,
   alwaysOpen,
   modalPosition,
@@ -50,7 +50,7 @@ export const Overlay: React.FC<OverlayProps> = ({
   willCloseModalize,
   overlay,
   activeGestureRef,
-}) => {
+}: OverlayProps) {
   const pointerEvents =
     alwaysOpen && (modalPosition === 'initial' || !modalPosition) ? 'box-none' : 'auto';
 
@@ -116,4 +116,6 @@ export const Overlay: React.FC<OverlayProps> = ({
       </Animated.View>
     </PanGestureHandler>
   );
-};
+}
+
+export const Overlay = React.memo(_Overlay);
