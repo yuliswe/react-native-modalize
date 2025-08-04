@@ -35,7 +35,7 @@ import { ModalizeContent } from './components/ModalizeContent';
 import { Overlay } from './components/Overlay';
 import { IHandles, IProps, TClose, TOpen, TPosition } from './options';
 import s from './styles';
-import { isAndroid, isIphoneX } from './utils/devices';
+import { isIphoneX } from './utils/devices';
 import { getSpringConfig } from './utils/get-spring-config';
 import { invariant } from './utils/invariant';
 import { isBelowRN65 } from './utils/libraries';
@@ -561,13 +561,11 @@ const _ModalizeBase = (
           }
         }
 
-        setEnableBounces(
-          isAndroid
-            ? false
-            : alwaysOpen
-            ? beginScrollYValue > 0 || translationY < 0
-            : enableBouncesValue,
-        );
+        const enableBounces = alwaysOpen
+          ? beginScrollYValue > 0 || translationY < 0
+          : enableBouncesValue && !isScrollAtTop;
+
+        setEnableBounces(enableBounces);
 
         if (nativeEvent.oldState === State.ACTIVE) {
           const toValue = translationY - beginScrollYValue;
@@ -908,7 +906,6 @@ const _ModalizeBase = (
                 handleGestureEvent={handleGestureEvent}
                 handlePanChildrenStateChange={handlePanChildrenStateChange}
                 enableBounces={enableBounces}
-                isScrollAtTop={isScrollAtTop}
                 keyboardToggle={keyboardToggle}
                 disableScroll={disableScroll}
                 panGestureEnabled={panGestureEnabled}

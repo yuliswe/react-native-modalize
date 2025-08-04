@@ -42,7 +42,6 @@ interface ModalizeContentProps {
 
   // State values from the main component
   enableBounces: boolean;
-  isScrollAtTop: boolean;
   keyboardToggle: boolean;
   disableScroll: boolean | undefined;
   panGestureEnabled: boolean;
@@ -67,7 +66,6 @@ export function _ModalizeContent({
   handleGestureEvent,
   handlePanChildrenStateChange,
   enableBounces,
-  isScrollAtTop,
   keyboardToggle,
   disableScroll,
   panGestureEnabled,
@@ -83,13 +81,12 @@ export function _ModalizeContent({
     | 'on-drag' = isIos ? 'interactive' : 'on-drag';
   const passedOnProps = flatListProps ?? sectionListProps ?? scrollViewProps;
   // We allow overwrites when the props (bounces, scrollEnabled) are set to false, when true we use Modalize's core behavior
-  const bounces = !isScrollAtTop && (passedOnProps?.bounces ?? enableBounces);
   const scrollEnabled = passedOnProps?.scrollEnabled ?? (keyboardToggle || !disableScroll);
   const scrollEventThrottle = passedOnProps?.scrollEventThrottle || 16;
 
   const opts = {
     ref: composeRefs(contentViewRef, contentRef) as React.RefObject<any>,
-    bounces,
+    bounces: enableBounces,
     scrollEventThrottle,
     onLayout: handleContentLayout,
     scrollEnabled: scrollEnabled,
@@ -116,6 +113,35 @@ export function _ModalizeContent({
       </ScrollView>
     );
   }
+
+  // useRenderDebug(
+  //   {
+  //     // Props that could cause rerenders
+  //     scrollViewProps,
+  //     flatListProps,
+  //     sectionListProps,
+  //     customRenderer,
+  //     childrenStyle,
+  //     adjustToContentHeight,
+  //     contentRef,
+
+  //     // State values that could cause rerenders
+  //     isScrollAtTop,
+  //     keyboardToggle,
+  //     disableScroll,
+  //     panGestureEnabled,
+
+  //     // Computed values that depend on props/state
+  //     enableBounces,
+  //     scrollEnabled,
+  //     scrollEventThrottle,
+  //     keyboardDismissMode,
+
+  //     // Children (React node that could change)
+  //     children,
+  //   },
+  //   { name: 'ModalizeContent' },
+  // );
 
   return (
     <PanGestureHandler
