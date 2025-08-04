@@ -1,9 +1,13 @@
 {
-  "name": "react-native-modalize",
+  "name": "@yuliswe/react-native-modalize",
   "version": "2.1.1",
   "description": "A highly customizable modal/bottom sheet that loves scrolling content.",
   "main": "lib/index.js",
   "types": "./lib/index.d.ts",
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://npm.pkg.github.com"
+  },
   "scripts": {
     "build": "rm -rf ./lib/ && mkdir -p ./lib/ && npx yarn lint && tsc",
     "lint": "eslint 'src/**/*.ts?(x)' && prettier --list-different \"**/*.{json,md,js,jsx,ts,tsx}\"",
@@ -35,10 +39,10 @@
   ],
   "author": "Jérémy Barbet",
   "license": "MIT",
-  "homepage": "https://github.com/jeremybarbet/react-native-modalize",
+  "homepage": "https://github.com/yuliswe/react-native-modalize.git",
   "repository": {
     "type": "git",
-    "url": "https://github.com/jeremybarbet/react-native-modalize"
+    "url": "https://github.com/yuliswe/react-native-modalize.git"
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx,json,md}": [
