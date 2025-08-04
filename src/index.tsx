@@ -18,9 +18,7 @@ import {
   Platform,
   SectionList,
   StatusBar,
-  StyleSheet,
   View,
-  ViewStyle,
 } from 'react-native';
 import {
   FlatList,
@@ -32,6 +30,7 @@ import {
 } from 'react-native-gesture-handler';
 
 import { Handle } from './components/Handle';
+import { HeaderAndFooter } from './components/HeaderAndFooter';
 import { Overlay } from './components/Overlay';
 import { IHandles, IProps, TClose, TOpen, TPosition } from './options';
 import s from './styles';
@@ -51,68 +50,6 @@ type ActiveGestureHandlerName =
 
 const renderElement = (Element: React.ReactNode): JSX.Element =>
   typeof Element === 'function' ? Element() : (Element as JSX.Element);
-
-interface ModalizeComponentProps {
-  component: React.ReactNode;
-  name: 'header' | 'footer' | 'floating';
-  panGestureEnabled: boolean;
-  panGestureComponentEnabled: boolean;
-  handleGestureEvent: any;
-  handleComponent: (event: PanGestureHandlerStateChangeEvent) => void;
-  handleComponentLayout: (
-    event: LayoutChangeEvent,
-    name: 'header' | 'footer' | 'floating',
-    absolute: boolean,
-  ) => void;
-}
-
-const ModalizeComponent: React.FC<ModalizeComponentProps> = ({
-  component,
-  name,
-  panGestureEnabled,
-  panGestureComponentEnabled,
-  handleGestureEvent,
-  handleComponent,
-  handleComponentLayout,
-}) => {
-  const renderElement = (Element: React.ReactNode): JSX.Element =>
-    typeof Element === 'function' ? Element() : (Element as JSX.Element);
-
-  if (!component) {
-    return null;
-  }
-
-  const tag = renderElement(component);
-
-  /**
-   * Nesting Touchable/ScrollView components with RNGH PanGestureHandler cancels the inner events.
-   * Until a better solution lands in RNGH, I will disable the PanGestureHandler for Android only,
-   * so inner touchable/gestures are working from the custom components you can pass in.
-   */
-  if (isAndroid && !panGestureComponentEnabled) {
-    return tag;
-  }
-
-  const obj: ViewStyle = StyleSheet.flatten(tag?.props?.style);
-  const absolute: boolean = obj?.position === 'absolute';
-  const zIndex: number | undefined = obj?.zIndex;
-
-  return (
-    <PanGestureHandler
-      enabled={panGestureEnabled}
-      shouldCancelWhenOutside={false}
-      onGestureEvent={handleGestureEvent}
-      onHandlerStateChange={handleComponent}
-    >
-      <Animated.View
-        style={{ zIndex }}
-        onLayout={(e: LayoutChangeEvent): void => handleComponentLayout(e, name, absolute)}
-      >
-        {tag}
-      </Animated.View>
-    </PanGestureHandler>
-  );
-};
 
 const AnimatedKeyboardAvoidingView = Animated.createAnimatedComponent(KeyboardAvoidingView);
 /**
@@ -580,6 +517,7 @@ const ModalizeBase = (
             ? beginScrollYValue > 0
             : beginScrollYValue > 0 || negativeReverseScroll)
         ) {
+          // console.log('🔴 setCancelClose(true)');
           setCancelClose(true);
           translateY.setValue(0);
           dragY.setValue(0);
@@ -970,7 +908,7 @@ const ModalizeBase = (
                 handleGestureEvent={handleGestureEvent}
                 handleComponent={handleComponent}
               />
-              <ModalizeComponent
+              <HeaderAndFooter
                 component={HeaderComponent}
                 name="header"
                 panGestureEnabled={panGestureEnabled}
@@ -980,7 +918,7 @@ const ModalizeBase = (
                 handleComponentLayout={handleComponentLayout}
               />
               {renderChildren()}
-              <ModalizeComponent
+              <HeaderAndFooter
                 component={FooterComponent}
                 name="footer"
                 panGestureEnabled={panGestureEnabled}
@@ -1013,7 +951,7 @@ const ModalizeBase = (
         </View>
       </TapGestureHandler>
 
-      <ModalizeComponent
+      <HeaderAndFooter
         component={FloatingComponent}
         name="floating"
         panGestureEnabled={panGestureEnabled}
