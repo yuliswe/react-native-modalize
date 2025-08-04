@@ -28,6 +28,7 @@ module.exports = {
     '@typescript-eslint/no-unsafe-return': 'off',
     '@typescript-eslint/no-unsafe-call': 'off',
     '@typescript-eslint/explicit-module-boundary-types': 'off',
+    'react/prop-types': 'off', // Disable prop-types for TypeScript files
   },
   settings: {
     react: {
@@ -35,5 +36,5 @@ module.exports = {
       version: 'detect',
     },
   },
-  ignorePatterns: ['node_modules/**/*', 'docs/**/*', 'examples/**/*', 'lib/**/*'],
+  ignorePatterns: ['node_modules/**/*', 'docs/**/*', 'examples/**/*', 'lib/**/*', '.eslintrc.js'],
 };
