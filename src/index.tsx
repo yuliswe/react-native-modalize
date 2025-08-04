@@ -769,7 +769,13 @@ const ModalizeBase = (
     );
   };
 
-  const renderContent = (): JSX.Element => {
+  const renderChildren = (): JSX.Element => {
+    const style = adjustToContentHeight ? s.content__adjustHeight : s.content__container;
+    const minDist = isRNGH2() ? undefined : ACTIVATED;
+
+    const handleChildrenStateChange = createGestureStateHandler('pan-children');
+
+    // Inlined renderContent logic
     const keyboardDismissMode:
       | Animated.Value
       | Animated.AnimatedInterpolation
@@ -801,31 +807,22 @@ const ModalizeBase = (
       simultaneousHandlers: [panGestureChildrenRef],
     };
 
+    let contentElement: JSX.Element;
+
     if (flatListProps) {
-      return <FlatList {...flatListProps} {...opts} />;
-    }
-
-    if (sectionListProps) {
-      return <SectionList {...sectionListProps} {...opts} />;
-    }
-
-    if (customRenderer) {
+      contentElement = <FlatList {...flatListProps} {...opts} />;
+    } else if (sectionListProps) {
+      contentElement = <SectionList {...sectionListProps} {...opts} />;
+    } else if (customRenderer) {
       const tag = renderElement(customRenderer);
-      return React.cloneElement(tag, { ...opts });
+      contentElement = React.cloneElement(tag, { ...opts });
+    } else {
+      contentElement = (
+        <ScrollView {...scrollViewProps} {...opts}>
+          {children}
+        </ScrollView>
+      );
     }
-
-    return (
-      <ScrollView {...scrollViewProps} {...opts}>
-        {children}
-      </ScrollView>
-    );
-  };
-
-  const renderChildren = (): JSX.Element => {
-    const style = adjustToContentHeight ? s.content__adjustHeight : s.content__container;
-    const minDist = isRNGH2() ? undefined : ACTIVATED;
-
-    const handleChildrenStateChange = createGestureStateHandler('pan-children');
 
     return (
       <PanGestureHandler
@@ -845,7 +842,7 @@ const ModalizeBase = (
             waitFor={tapGestureModalizeRef}
             simultaneousHandlers={panGestureChildrenRef}
           > */}
-          {renderContent()}
+          {contentElement}
           {/* </NativeViewGestureHandler> */}
         </Animated.View>
       </PanGestureHandler>
