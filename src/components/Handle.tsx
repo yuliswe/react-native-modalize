@@ -12,7 +12,7 @@ interface HandleProps {
   panGestureEnabled: boolean;
   tapGestureModalizeRef: React.RefObject<any>;
   handleGestureEvent: any;
-  handleComponent: (event: PanGestureHandlerStateChangeEvent) => void;
+  handlePanStateChange: (event: PanGestureHandlerStateChangeEvent) => void;
 }
 
 export const Handle: React.FC<HandleProps> = ({
@@ -22,7 +22,7 @@ export const Handle: React.FC<HandleProps> = ({
   panGestureEnabled,
   tapGestureModalizeRef,
   handleGestureEvent,
-  handleComponent,
+  handlePanStateChange,
 }) => {
   const handleStyles: (TStyle | undefined)[] = [s.handle];
   const shapeStyles: (TStyle | undefined)[] = [s.handle__shape, handleStyle];
@@ -43,7 +43,7 @@ export const Handle: React.FC<HandleProps> = ({
       simultaneousHandlers={tapGestureModalizeRef}
       shouldCancelWhenOutside={false}
       onGestureEvent={handleGestureEvent}
-      onHandlerStateChange={handleComponent}
+      onHandlerStateChange={handlePanStateChange}
     >
       <Animated.View style={handleStyles}>
         <View style={shapeStyles} />

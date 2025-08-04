@@ -10,7 +10,7 @@ interface HeaderAndFooterProps {
   panGestureEnabled: boolean;
   panGestureComponentEnabled: boolean;
   handleGestureEvent: any;
-  handleComponent: (event: PanGestureHandlerStateChangeEvent) => void;
+  handlePanStateChange: (event: PanGestureHandlerStateChangeEvent) => void;
   handleComponentLayout: (
     event: LayoutChangeEvent,
     name: 'header' | 'footer' | 'floating',
@@ -27,7 +27,7 @@ export const HeaderAndFooter: React.FC<HeaderAndFooterProps> = ({
   panGestureEnabled,
   panGestureComponentEnabled,
   handleGestureEvent,
-  handleComponent,
+  handlePanStateChange,
   handleComponentLayout,
 }) => {
   if (!component) {
@@ -54,7 +54,7 @@ export const HeaderAndFooter: React.FC<HeaderAndFooterProps> = ({
       enabled={panGestureEnabled}
       shouldCancelWhenOutside={false}
       onGestureEvent={handleGestureEvent}
-      onHandlerStateChange={handleComponent}
+      onHandlerStateChange={handlePanStateChange}
     >
       <Animated.View
         style={{ zIndex }}

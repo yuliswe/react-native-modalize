@@ -647,7 +647,10 @@ const ModalizeBase = (
     };
   };
 
-  const handleComponent = ({ nativeEvent }: PanGestureHandlerStateChangeEvent): void => {
+  const handlePanComponentStateChange = createGestureStateHandler('pan-component');
+  const handlePanChildrenStateChange = createGestureStateHandler('pan-children');
+
+  const handlePanStateChange = ({ nativeEvent }: PanGestureHandlerStateChangeEvent): void => {
     const { state } = nativeEvent;
 
     // Track active gesture handler
@@ -665,8 +668,7 @@ const ModalizeBase = (
       beginScrollY.setValue(0);
     }
 
-    const handleComponentStateChange = createGestureStateHandler('pan-component');
-    handleComponentStateChange({ nativeEvent });
+    handlePanComponentStateChange({ nativeEvent });
   };
 
   // Helper function to get currently active gesture handler
@@ -705,8 +707,6 @@ const ModalizeBase = (
   const renderChildren = (): JSX.Element => {
     const style = adjustToContentHeight ? s.content__adjustHeight : s.content__container;
     const minDist = isRNGH2() ? undefined : ACTIVATED;
-
-    const handleChildrenStateChange = createGestureStateHandler('pan-children');
 
     // Inlined renderContent logic
     const keyboardDismissMode:
@@ -767,7 +767,7 @@ const ModalizeBase = (
         minDist={minDist}
         activeOffsetY={ACTIVATED}
         activeOffsetX={ACTIVATED}
-        onHandlerStateChange={handleChildrenStateChange}
+        onHandlerStateChange={handlePanChildrenStateChange}
       >
         <Animated.View style={[style, childrenStyle]}>
           {/* <NativeViewGestureHandler
@@ -906,7 +906,7 @@ const ModalizeBase = (
                 panGestureEnabled={panGestureEnabled}
                 tapGestureModalizeRef={tapGestureModalizeRef}
                 handleGestureEvent={handleGestureEvent}
-                handleComponent={handleComponent}
+                handlePanStateChange={handlePanStateChange}
               />
               <HeaderAndFooter
                 component={HeaderComponent}
@@ -914,7 +914,7 @@ const ModalizeBase = (
                 panGestureEnabled={panGestureEnabled}
                 panGestureComponentEnabled={panGestureComponentEnabled}
                 handleGestureEvent={handleGestureEvent}
-                handleComponent={handleComponent}
+                handlePanStateChange={handlePanStateChange}
                 handleComponentLayout={handleComponentLayout}
               />
               {renderChildren()}
@@ -924,7 +924,7 @@ const ModalizeBase = (
                 panGestureEnabled={panGestureEnabled}
                 panGestureComponentEnabled={panGestureComponentEnabled}
                 handleGestureEvent={handleGestureEvent}
-                handleComponent={handleComponent}
+                handlePanStateChange={handlePanStateChange}
                 handleComponentLayout={handleComponentLayout}
               />
             </AnimatedKeyboardAvoidingView>
@@ -957,7 +957,7 @@ const ModalizeBase = (
         panGestureEnabled={panGestureEnabled}
         panGestureComponentEnabled={panGestureComponentEnabled}
         handleGestureEvent={handleGestureEvent}
-        handleComponent={handleComponent}
+        handlePanStateChange={handlePanStateChange}
         handleComponentLayout={handleComponentLayout}
       />
     </View>
