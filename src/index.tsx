@@ -59,6 +59,28 @@ const USE_NATIVE_DRIVER = true;
 const ACTIVATED = 200;
 const PAN_DURATION = 150;
 
+// Memoized constants
+const DEFAULT_OPEN_ANIMATION_CONFIG = {
+  timing: { duration: 240, easing: Easing.ease },
+  spring: { speed: 14, bounciness: 4 },
+};
+
+const DEFAULT_CLOSE_ANIMATION_CONFIG = {
+  timing: { duration: 240, easing: Easing.ease },
+};
+
+const DEFAULT_MODAL_TOP_OFFSET = Platform.select({
+  ios: 0,
+  android: StatusBar.currentHeight || 0,
+  default: 0,
+});
+
+const DEFAULT_AVOID_KEYBOARD_LIKE_IOS = Platform.select({
+  ios: true,
+  android: false,
+  default: true,
+});
+
 const ModalizeBase = (
   {
     // Refs
@@ -81,22 +103,14 @@ const ModalizeBase = (
     // Layout
     snapPoint,
     modalHeight,
-    modalTopOffset = Platform.select({
-      ios: 0,
-      android: StatusBar.currentHeight || 0,
-      default: 0,
-    }),
+    modalTopOffset = DEFAULT_MODAL_TOP_OFFSET,
     alwaysOpen,
     adjustToContentHeight = false,
 
     // Options
     handlePosition = 'outside',
     disableScrollIfPossible = true,
-    avoidKeyboardLikeIOS = Platform.select({
-      ios: true,
-      android: false,
-      default: true,
-    }),
+    avoidKeyboardLikeIOS = DEFAULT_AVOID_KEYBOARD_LIKE_IOS,
     keyboardAvoidingBehavior = 'padding',
     keyboardAvoidingOffset,
     panGestureEnabled = true,
@@ -106,13 +120,8 @@ const ModalizeBase = (
     closeSnapPointStraightEnabled = true,
 
     // Animations
-    openAnimationConfig = {
-      timing: { duration: 240, easing: Easing.ease },
-      spring: { speed: 14, bounciness: 4 },
-    },
-    closeAnimationConfig = {
-      timing: { duration: 240, easing: Easing.ease },
-    },
+    openAnimationConfig = DEFAULT_OPEN_ANIMATION_CONFIG,
+    closeAnimationConfig = DEFAULT_CLOSE_ANIMATION_CONFIG,
     dragToss = 0.18,
     threshold = 120,
     velocity = 2800,
