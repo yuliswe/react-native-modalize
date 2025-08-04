@@ -32,7 +32,8 @@ import {
   TapGestureHandlerStateChangeEvent,
 } from 'react-native-gesture-handler';
 
-import { IHandles, IProps, TClose, TOpen, TPosition, TStyle } from './options';
+import { Handle } from './components/Handle';
+import { IHandles, IProps, TClose, TOpen, TPosition } from './options';
 import s from './styles';
 import { composeRefs } from './utils/compose-refs';
 import { isAndroid, isIos, isIphoneX } from './utils/devices';
@@ -763,34 +764,6 @@ const ModalizeBase = (
     },
   });
 
-  const renderHandle = (): JSX.Element | null => {
-    const handleStyles: (TStyle | undefined)[] = [s.handle];
-    const shapeStyles: (TStyle | undefined)[] = [s.handle__shape, handleStyle];
-
-    if (!withHandle) {
-      return null;
-    }
-
-    if (!isHandleOutside) {
-      handleStyles.push(s.handleBottom);
-      shapeStyles.push(s.handle__shapeBottom, handleStyle);
-    }
-
-    return (
-      <PanGestureHandler
-        enabled={panGestureEnabled}
-        simultaneousHandlers={tapGestureModalizeRef}
-        shouldCancelWhenOutside={false}
-        onGestureEvent={handleGestureEvent}
-        onHandlerStateChange={handleComponent}
-      >
-        <Animated.View style={handleStyles}>
-          <View style={shapeStyles} />
-        </Animated.View>
-      </PanGestureHandler>
-    );
-  };
-
   const renderChildren = (): JSX.Element => {
     const style = adjustToContentHeight ? s.content__adjustHeight : s.content__container;
     const minDist = isRNGH2() ? undefined : ACTIVATED;
@@ -1052,7 +1025,15 @@ const ModalizeBase = (
         <View style={s.modalize__wrapper} pointerEvents="box-none">
           {showContent && (
             <AnimatedKeyboardAvoidingView {...keyboardAvoidingViewProps}>
-              {renderHandle()}
+              <Handle
+                withHandle={withHandle}
+                handlePosition={handlePosition}
+                handleStyle={handleStyle}
+                panGestureEnabled={panGestureEnabled}
+                tapGestureModalizeRef={tapGestureModalizeRef}
+                handleGestureEvent={handleGestureEvent}
+                handleComponent={handleComponent}
+              />
               <ModalizeComponent
                 component={HeaderComponent}
                 name="header"

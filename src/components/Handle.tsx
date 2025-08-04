@@ -1,0 +1,53 @@
+import * as React from 'react';
+import { Animated, View } from 'react-native';
+import { PanGestureHandler, PanGestureHandlerStateChangeEvent } from 'react-native-gesture-handler';
+
+import { TStyle } from '../options';
+import s from '../styles';
+
+interface HandleProps {
+  withHandle: boolean;
+  handlePosition: 'inside' | 'outside';
+  handleStyle?: TStyle;
+  panGestureEnabled: boolean;
+  tapGestureModalizeRef: React.RefObject<any>;
+  handleGestureEvent: any;
+  handleComponent: (event: PanGestureHandlerStateChangeEvent) => void;
+}
+
+export const Handle: React.FC<HandleProps> = ({
+  withHandle,
+  handlePosition,
+  handleStyle,
+  panGestureEnabled,
+  tapGestureModalizeRef,
+  handleGestureEvent,
+  handleComponent,
+}) => {
+  const handleStyles: (TStyle | undefined)[] = [s.handle];
+  const shapeStyles: (TStyle | undefined)[] = [s.handle__shape, handleStyle];
+  const isHandleOutside = handlePosition === 'outside';
+
+  if (!withHandle) {
+    return null;
+  }
+
+  if (!isHandleOutside) {
+    handleStyles.push(s.handleBottom);
+    shapeStyles.push(s.handle__shapeBottom, handleStyle);
+  }
+
+  return (
+    <PanGestureHandler
+      enabled={panGestureEnabled}
+      simultaneousHandlers={tapGestureModalizeRef}
+      shouldCancelWhenOutside={false}
+      onGestureEvent={handleGestureEvent}
+      onHandlerStateChange={handleComponent}
+    >
+      <Animated.View style={handleStyles}>
+        <View style={shapeStyles} />
+      </Animated.View>
+    </PanGestureHandler>
+  );
+};
