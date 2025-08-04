@@ -10,6 +10,7 @@
     "prettier": "prettier --write \"{docs,examples,src}/**/*.{json,md,js,jsx,ts,tsx}\"",
     "postversion": "sh ./post-version.sh",
     "watch:modalize": "npx yarn tsc --watch",
+    "watch:install": "nodemon --config ./nodemon.json --exec sh -c \"sleep 1 && npm pack && cd ~/lab/zemil-mobile && npm i  /Users/yuli/lab/react-native-modalize/react-native-modalize-2.1.1.tgz\"",
     "watch:expo": "concurrently \"npx yarn watch:modalize\" \"npx yarn cpx 'src/**/*' 'examples/expo/node_modules/react-native-modalize' --watch\"",
     "watch:react-native-navigation": "concurrently \"npx yarn watch:modalize\" \"npx yarn cpx 'src/**/*' 'examples/react-native-navigation/node_modules/react-native-modalize' --watch\"",
     "watch:react-navigation": "concurrently \"npx yarn watch:modalize\" \"npx yarn cpx 'src/**/*' 'examples/react-navigation/node_modules/react-native-modalize' --watch\""
@@ -80,6 +81,7 @@
     "eslint-plugin-react-native": "3.10.0",
     "husky": "4.3.0",
     "lint-staged": "10.5.2",
+    "nodemon": "^3.1.10",
     "prettier": "^2.2.1",
     "react": "17.0.2",
     "react-native": "0.66.0",

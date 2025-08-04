@@ -1,0 +1,6 @@
+{
+  "watch": ["./src", "./*.{js,ts,tsx,yml,yaml,json,css}"],
+  "ext": "js,ts,tsx,yml,yaml,json",
+  "ignore": ["**/__generated__/**", "**/node_modules/**", "**/build/**", "**/dist/**"],
+  "signal": "SIGINT"
+}

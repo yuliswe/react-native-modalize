@@ -7,12 +7,14 @@ import {
   SectionListProps,
   EasingFunction,
   LayoutRectangle,
-  ScrollView,
-  FlatList,
   SectionList,
   StyleProp,
   ModalProps,
 } from 'react-native';
+import {
+  ScrollView as RNGHScrollView,
+  FlatList as RNGHFlatList,
+} from 'react-native-gesture-handler';
 
 export type TOpen = 'default' | 'top';
 export type TClose = 'default' | 'alwaysOpen';
@@ -45,7 +47,7 @@ export interface IProps<ListItem = any> {
   /**
    * A reference to the view (ScrollView, FlatList, SectionList) that provides the scroll behavior, where you will be able to access their owns methods.
    */
-  contentRef?: React.RefObject<ScrollView | FlatList<ListItem> | SectionList<ListItem>>;
+  contentRef?: React.RefObject<RNGHScrollView | RNGHFlatList<ListItem> | SectionList<ListItem>>;
 
   /**
    * A React node that will define the content of the modal.
@@ -55,17 +57,17 @@ export interface IProps<ListItem = any> {
   /**
    * An object to pass any of the react-native ScrollView's props.
    */
-  scrollViewProps?: Animated.AnimatedProps<ScrollViewProps>;
+  scrollViewProps?: ScrollViewProps;
 
   /**
    * An object to pass any of the react-native FlatList's props.
    */
-  flatListProps?: Animated.AnimatedProps<FlatListProps<ListItem>>;
+  flatListProps?: FlatListProps<ListItem>;
 
   /**
    * An object to pass any of the react-native SectionList's props.
    */
-  sectionListProps?: Animated.AnimatedProps<SectionListProps<ListItem>>;
+  sectionListProps?: SectionListProps<ListItem>;
 
   /**
    * An animated custom JSX Element that will inherits of the onScroll/gesture events

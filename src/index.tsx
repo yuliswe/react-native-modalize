@@ -5,44 +5,41 @@
 import * as React from 'react';
 import {
   Animated,
-  View,
-  Modal,
-  Easing,
-  LayoutChangeEvent,
   BackHandler,
-  KeyboardAvoidingView,
-  Keyboard,
-  ScrollView,
-  FlatList,
-  SectionList,
-  Platform,
-  StatusBar,
-  KeyboardEvent,
-  NativeSyntheticEvent,
-  NativeScrollEvent,
-  StyleSheet,
-  KeyboardAvoidingViewProps,
-  ViewStyle,
-  NativeEventSubscription,
+  Easing,
   EmitterSubscription,
+  Keyboard,
+  KeyboardAvoidingView,
+  KeyboardAvoidingViewProps,
+  KeyboardEvent,
+  LayoutChangeEvent,
+  Modal,
+  NativeEventSubscription,
+  Platform,
+  SectionList,
+  StatusBar,
+  StyleSheet,
+  View,
+  ViewStyle,
 } from 'react-native';
 import {
+  FlatList,
   PanGestureHandler,
-  NativeViewGestureHandler,
+  PanGestureHandlerStateChangeEvent,
+  ScrollView,
   State,
   TapGestureHandler,
-  PanGestureHandlerStateChangeEvent,
   TapGestureHandlerStateChangeEvent,
 } from 'react-native-gesture-handler';
 
-import { IProps, TOpen, TClose, TStyle, IHandles, TPosition } from './options';
-import { useDimensions } from './utils/use-dimensions';
-import { getSpringConfig } from './utils/get-spring-config';
-import { isIphoneX, isIos, isAndroid } from './utils/devices';
-import { isBelowRN65, isRNGH2 } from './utils/libraries';
-import { invariant } from './utils/invariant';
-import { composeRefs } from './utils/compose-refs';
+import { IHandles, IProps, TClose, TOpen, TPosition, TStyle } from './options';
 import s from './styles';
+import { composeRefs } from './utils/compose-refs';
+import { isAndroid, isIos, isIphoneX } from './utils/devices';
+import { getSpringConfig } from './utils/get-spring-config';
+import { invariant } from './utils/invariant';
+import { isBelowRN65, isRNGH2 } from './utils/libraries';
+import { useDimensions } from './utils/use-dimensions';
 
 const AnimatedKeyboardAvoidingView = Animated.createAnimatedComponent(KeyboardAvoidingView);
 /**
@@ -52,7 +49,7 @@ const AnimatedKeyboardAvoidingView = Animated.createAnimatedComponent(KeyboardAv
  */
 const SCROLL_THRESHOLD = -4;
 const USE_NATIVE_DRIVER = true;
-const ACTIVATED = 20;
+const ACTIVATED = 200;
 const PAN_DURATION = 150;
 
 const ModalizeBase = (
@@ -161,6 +158,7 @@ const ModalizeBase = (
   const [modalPosition, setModalPosition] = React.useState<TPosition>('initial');
   const [cancelClose, setCancelClose] = React.useState(false);
   const [layouts, setLayouts] = React.useState<Map<string, number>>(new Map());
+  const [isScrollAtTop, setIsScrollAtTop] = React.useState(true);
 
   const cancelTranslateY = React.useRef(new Animated.Value(1)).current; // 1 by default to have the translateY animation running
   const componentTranslateY = React.useRef(new Animated.Value(0)).current;
@@ -173,7 +171,6 @@ const ModalizeBase = (
 
   const tapGestureModalizeRef = React.useRef<TapGestureHandler>(null);
   const panGestureChildrenRef = React.useRef<PanGestureHandler>(null);
-  const nativeViewChildrenRef = React.useRef<NativeViewGestureHandler>(null);
   const contentViewRef = React.useRef<ScrollView | FlatList<any> | SectionList<any>>(null);
   const tapGestureOverlayRef = React.useRef<TapGestureHandler>(null);
   const backButtonListenerRef = React.useRef<NativeEventSubscription>(null);
@@ -419,6 +416,12 @@ const ModalizeBase = (
     handleBaseLayout('content', nativeEvent.layout.height);
   };
 
+  const handleScroll = (event: any) => {
+    const { contentOffset } = event.nativeEvent;
+    const isAtTop = contentOffset.y <= 0;
+    setIsScrollAtTop(isAtTop);
+  };
+
   const handleComponentLayout = (
     { nativeEvent }: LayoutChangeEvent,
     name: 'header' | 'footer' | 'floating',
@@ -444,7 +447,7 @@ const ModalizeBase = (
     handleAnimateClose(dest, callback);
   };
 
-  const handleChildren = (
+  const handleStateChange = (
     { nativeEvent }: PanGestureHandlerStateChangeEvent,
     type?: 'component' | 'children',
   ): void => {
@@ -472,10 +475,12 @@ const ModalizeBase = (
     if (nativeEvent.oldState === State.BEGAN) {
       setCancelClose(false);
 
+      // Only allow pan gesture to close modal if scroll is at top
       if (
-        !closeSnapPointStraightEnabled && snapPoint
+        !isScrollAtTop ||
+        (!closeSnapPointStraightEnabled && snapPoint
           ? beginScrollYValue > 0
-          : beginScrollYValue > 0 || negativeReverseScroll
+          : beginScrollYValue > 0 || negativeReverseScroll)
       ) {
         setCancelClose(true);
         translateY.setValue(0);
@@ -546,7 +551,7 @@ const ModalizeBase = (
             willCloseModalize = false;
           }
         });
-      } else if (closeThreshold && !alwaysOpen && !cancelClose) {
+      } else if (closeThreshold && !alwaysOpen && !cancelClose && isScrollAtTop) {
         willCloseModalize = true;
         handleClose();
       }
@@ -612,7 +617,7 @@ const ModalizeBase = (
       beginScrollY.setValue(0);
     }
 
-    handleChildren({ nativeEvent }, 'component');
+    handleStateChange({ nativeEvent }, 'component');
   };
 
   const handleOverlay = ({ nativeEvent }: TapGestureHandlerStateChangeEvent): void => {
@@ -634,11 +639,14 @@ const ModalizeBase = (
         const offset = alwaysOpen ?? snapPoint ?? 0;
         const diff = Math.abs(translationY / (endHeight - offset));
         const y = translationY <= 0 ? diff : 1 - diff;
-        let value: number;
+        let value: number; // between 0 and 1
 
+        // Prevent the modal from going below its initial position
         if (modalPosition === 'initial' && translationY > 0) {
           value = 0;
-        } else if (modalPosition === 'top' && translationY <= 0) {
+        }
+        // Prevent the modal from going above the top position
+        else if (modalPosition === 'top' && translationY <= 0) {
           value = 1;
         } else {
           value = y;
@@ -678,7 +686,7 @@ const ModalizeBase = (
   };
 
   const renderElement = (Element: React.ReactNode): JSX.Element =>
-    typeof Element === 'function' ? Element() : Element;
+    typeof Element === 'function' ? Element() : (Element as JSX.Element);
 
   const renderComponent = (
     component: React.ReactNode,
@@ -728,38 +736,36 @@ const ModalizeBase = (
       | 'on-drag' = isIos ? 'interactive' : 'on-drag';
     const passedOnProps = flatListProps ?? sectionListProps ?? scrollViewProps;
     // We allow overwrites when the props (bounces, scrollEnabled) are set to false, when true we use Modalize's core behavior
-    const bounces =
-      passedOnProps?.bounces !== undefined && !passedOnProps?.bounces
-        ? passedOnProps?.bounces
-        : enableBounces;
-    const scrollEnabled =
-      passedOnProps?.scrollEnabled !== undefined && !passedOnProps?.scrollEnabled
-        ? passedOnProps?.scrollEnabled
-        : keyboardToggle || !disableScroll;
+    const bounces = !isScrollAtTop && (passedOnProps?.bounces ?? enableBounces);
+    const scrollEnabled = passedOnProps?.scrollEnabled ?? (keyboardToggle || !disableScroll);
     const scrollEventThrottle = passedOnProps?.scrollEventThrottle || 16;
-    const onScrollBeginDrag = passedOnProps?.onScrollBeginDrag as (
-      event: NativeSyntheticEvent<NativeScrollEvent>,
-    ) => void | undefined;
+    // const onScrollBeginDrag = passedOnProps?.onScrollBeginDrag as (
+    //   event: NativeSyntheticEvent<NativeScrollEvent>,
+    // ) => void | undefined;
 
     const opts = {
       ref: composeRefs(contentViewRef, contentRef) as React.RefObject<any>,
       bounces,
-      onScrollBeginDrag: Animated.event([{ nativeEvent: { contentOffset: { y: beginScrollY } } }], {
-        useNativeDriver: USE_NATIVE_DRIVER,
-        listener: onScrollBeginDrag,
-      }),
+      // onScrollBeginDrag: Animated.event([{ nativeEvent: { contentOffset: { y: beginScrollY } } }], {
+      //   useNativeDriver: USE_NATIVE_DRIVER,
+      //   listener: onScrollBeginDrag,
+      // }),
       scrollEventThrottle,
       onLayout: handleContentLayout,
-      scrollEnabled,
+      scrollEnabled: scrollEnabled,
       keyboardDismissMode,
+      onScroll: handleScroll,
+      // Gesture handler props for scrollable components
+      waitFor: tapGestureModalizeRef,
+      simultaneousHandlers: [panGestureChildrenRef],
     };
 
     if (flatListProps) {
-      return <Animated.FlatList {...flatListProps} {...opts} />;
+      return <FlatList {...flatListProps} {...opts} />;
     }
 
     if (sectionListProps) {
-      return <Animated.SectionList {...sectionListProps} {...opts} />;
+      return <SectionList {...sectionListProps} {...opts} />;
     }
 
     if (customRenderer) {
@@ -768,9 +774,9 @@ const ModalizeBase = (
     }
 
     return (
-      <Animated.ScrollView {...scrollViewProps} {...opts}>
+      <ScrollView {...scrollViewProps} {...opts}>
         {children}
-      </Animated.ScrollView>
+      </ScrollView>
     );
   };
 
@@ -782,22 +788,22 @@ const ModalizeBase = (
       <PanGestureHandler
         ref={panGestureChildrenRef}
         enabled={panGestureEnabled}
-        simultaneousHandlers={[nativeViewChildrenRef, tapGestureModalizeRef]}
+        simultaneousHandlers={[contentViewRef, tapGestureModalizeRef]}
         shouldCancelWhenOutside={false}
         onGestureEvent={handleGestureEvent}
         minDist={minDist}
         activeOffsetY={ACTIVATED}
         activeOffsetX={ACTIVATED}
-        onHandlerStateChange={handleChildren}
+        onHandlerStateChange={handleStateChange}
       >
         <Animated.View style={[style, childrenStyle]}>
-          <NativeViewGestureHandler
+          {/* <NativeViewGestureHandler
             ref={nativeViewChildrenRef}
             waitFor={tapGestureModalizeRef}
             simultaneousHandlers={panGestureChildrenRef}
-          >
-            {renderContent()}
-          </NativeViewGestureHandler>
+          > */}
+          {renderContent()}
+          {/* </NativeViewGestureHandler> */}
         </Animated.View>
       </PanGestureHandler>
     );
@@ -813,7 +819,7 @@ const ModalizeBase = (
         simultaneousHandlers={tapGestureModalizeRef}
         shouldCancelWhenOutside={false}
         onGestureEvent={handleGestureEvent}
-        onHandlerStateChange={handleChildren}
+        onHandlerStateChange={handleStateChange}
       >
         <Animated.View style={s.overlay} pointerEvents={pointerEvents}>
           {showContent && (
