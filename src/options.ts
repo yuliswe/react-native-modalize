@@ -14,6 +14,8 @@ import {
 import {
   ScrollView as RNGHScrollView,
   FlatList as RNGHFlatList,
+  TapGestureHandler,
+  PanGestureHandler,
 } from 'react-native-gesture-handler';
 
 export type TOpen = 'default' | 'top';
@@ -70,9 +72,24 @@ export interface IProps<ListItem = any> {
   sectionListProps?: SectionListProps<ListItem>;
 
   /**
-   * An animated custom JSX Element that will inherits of the onScroll/gesture events
+   * A function that renders custom content with scroll/gesture event props
    */
-  customRenderer?: JSX.Element;
+  renderChildren?: (props: {
+    ref: React.RefObject<RNGHScrollView | RNGHFlatList<ListItem> | SectionList<ListItem>>;
+    bounces: boolean;
+    scrollEventThrottle: number;
+    onLayout: (event: any) => void;
+    scrollEnabled: boolean;
+    keyboardDismissMode:
+      | Animated.Value
+      | Animated.AnimatedInterpolation
+      | 'interactive'
+      | 'on-drag';
+    onScroll: (event: any) => void;
+    waitFor: React.RefObject<TapGestureHandler>;
+    simultaneousHandlers: React.RefObject<PanGestureHandler>[];
+    children: React.ReactNode;
+  }) => JSX.Element;
 
   /**
    * Define the style of the root modal component.

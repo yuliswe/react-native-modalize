@@ -2,22 +2,23 @@ import React, { useRef } from 'react';
 import { Animated } from 'react-native';
 import { Host, Portal } from 'react-native-portalize';
 
-import { Layout } from './src/components/layout/Layout';
-import { Header } from './src/components/header/Header';
 import { Button } from './src/components/button/Button';
+import { Header } from './src/components/header/Header';
+import { Layout } from './src/components/layout/Layout';
 import { AbsoluteHeader } from './src/components/modals/AbsoluteHeader';
-import { SimpleContent } from './src/components/modals/SimpleContent';
-import { FixedContent } from './src/components/modals/FixedContent';
-import { SnappingList } from './src/components/modals/SnappingList';
-import { FlatList } from './src/components/modals/FlatList';
-import { SectionList } from './src/components/modals/SectionList';
 import { AlwaysOpen } from './src/components/modals/AlwaysOpen';
 import { AppleMusicPlayer } from './src/components/modals/AppleMusicPlayer';
+import { CustomRenderer } from './src/components/modals/CustomRenderer';
 import { FacebookWebView } from './src/components/modals/FacebookWebView';
+import { FixedContent } from './src/components/modals/FixedContent';
+import { FlatList } from './src/components/modals/FlatList';
+import { SectionList } from './src/components/modals/SectionList';
+import { SimpleContent } from './src/components/modals/SimpleContent';
 import { SlackTabView } from './src/components/modals/SlackTabView';
+import { SnappingList } from './src/components/modals/SnappingList';
 
 export default () => {
-  const modals = Array.from({ length: 8 }).map(_ => useRef(null).current);
+  const modals = Array.from({ length: 10 }).map(_ => useRef(null).current);
   const animated = useRef(new Animated.Value(0)).current;
 
   const renderButtons = links => {
@@ -50,6 +51,7 @@ export default () => {
           'Apple Music Player',
           'Facebook WebView',
           'Slack TabView',
+          'Custom Renderer',
         ])}
 
         <SimpleContent ref={el => (modals[0] = el)} />
@@ -63,6 +65,7 @@ export default () => {
         </Portal>
         <FacebookWebView ref={el => (modals[7] = el)} />
         <SlackTabView ref={el => (modals[8] = el)} />
+        <CustomRenderer ref={el => (modals[9] = el)} />
         <AlwaysOpen />
       </Layout>
     </Host>

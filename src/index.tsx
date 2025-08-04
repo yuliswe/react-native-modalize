@@ -90,7 +90,7 @@ const _ModalizeBase = (
     scrollViewProps,
     flatListProps,
     sectionListProps,
-    customRenderer,
+    renderChildren,
 
     // Styles
     rootStyle,
@@ -894,7 +894,7 @@ const _ModalizeBase = (
                 scrollViewProps={scrollViewProps}
                 flatListProps={flatListProps}
                 sectionListProps={sectionListProps}
-                customRenderer={customRenderer}
+                renderChildren={renderChildren}
                 childrenStyle={childrenStyle}
                 adjustToContentHeight={adjustToContentHeight}
                 contentRef={contentRef}

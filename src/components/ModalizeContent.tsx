@@ -16,15 +16,12 @@ import { isRNGH2 } from '../utils/libraries';
 
 const ACTIVATED = 20;
 
-const renderElement = (Element: React.ReactNode): JSX.Element =>
-  typeof Element === 'function' ? Element() : (Element as JSX.Element);
-
 interface ModalizeContentProps {
   // Props from IProps that are needed for renderChildren
   scrollViewProps?: IProps['scrollViewProps'];
   flatListProps?: IProps['flatListProps'];
   sectionListProps?: IProps['sectionListProps'];
-  customRenderer?: IProps['customRenderer'];
+  renderChildren?: IProps['renderChildren'];
   childrenStyle?: IProps['childrenStyle'];
   adjustToContentHeight?: boolean;
   contentRef?: IProps['contentRef'];
@@ -54,7 +51,7 @@ export function _ModalizeContent({
   scrollViewProps,
   flatListProps,
   sectionListProps,
-  customRenderer,
+  renderChildren,
   childrenStyle,
   adjustToContentHeight,
   contentRef,
@@ -103,9 +100,8 @@ export function _ModalizeContent({
     contentElement = <FlatList {...flatListProps} {...opts} />;
   } else if (sectionListProps) {
     contentElement = <SectionList {...sectionListProps} {...opts} />;
-  } else if (customRenderer) {
-    const tag = renderElement(customRenderer);
-    contentElement = React.cloneElement(tag, { ...opts });
+  } else if (renderChildren) {
+    contentElement = renderChildren({ ...opts, children });
   } else {
     contentElement = (
       <ScrollView {...scrollViewProps} {...opts}>
@@ -120,7 +116,7 @@ export function _ModalizeContent({
   //     scrollViewProps,
   //     flatListProps,
   //     sectionListProps,
-  //     customRenderer,
+  //     renderChildren,
   //     childrenStyle,
   //     adjustToContentHeight,
   //     contentRef,

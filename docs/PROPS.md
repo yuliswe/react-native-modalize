@@ -97,7 +97,7 @@ On older version of react-native, most likely something like `contentRef.getNode
 
 ## Renderers
 
-Modalize is shipped by default with four different renderers. The default one is a ScrollView and you just have to pass your content without specifying it directly. If you want to use a FlatList or a SectionList, then you don't have to pass the `children` props, but the `data`/`renderItem` that you can normally find with both of them. You also have the possibility to pass your `customRenderer` with this props.
+Modalize is shipped by default with four different renderers. The default one is a ScrollView and you just have to pass your content without specifying it directly. If you want to use a FlatList or a SectionList, then you don't have to pass the `children` props, but the `data`/`renderItem` that you can normally find with both of them. You also have the possibility to pass your `renderChildren` function with this props.
 
 ### `children`
 
@@ -137,15 +137,25 @@ Refer to the [`react-native` SectionList documentation](https://reactnative.dev/
 | ------ | -------- |
 | object | No       |
 
-### `customRenderer`
+### `renderChildren`
 
-An animated custom React node that will inherit of the onScroll/gesture events
+A function that renders custom content with scroll/gesture event props. This function receives an object with all the necessary props for scroll behavior and gesture handling.
 
-!> You must pass an animated component, either by doing e.g. `<Animated.View ...>` or `const AnimatedCustomComponent = Animated.createAnimatedComponent(CustomComponent);`.
+The function receives the following props:
 
-| Type | Required |
-| ---- | -------- |
-| node | No       |
+- `ref`: Reference to the scrollable component
+- `bounces`: Whether the content bounces when scrolling
+- `scrollEventThrottle`: Throttle for scroll events
+- `onLayout`: Layout change handler
+- `scrollEnabled`: Whether scrolling is enabled
+- `keyboardDismissMode`: Keyboard dismiss mode
+- `onScroll`: Scroll event handler
+- `waitFor`: Gesture handler to wait for
+- `simultaneousHandlers`: Array of simultaneous gesture handlers
+
+| Type     | Required |
+| -------- | -------- |
+| function | No       |
 
 ## Styles
 

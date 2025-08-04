@@ -1,6 +1,6 @@
 {
   "name": "@yuliswe/react-native-modalize",
-  "version": "2.1.2",
+  "version": "2.2.0",
   "description": "A highly customizable modal/bottom sheet that loves scrolling content.",
   "main": "lib/index.js",
   "types": "./lib/index.d.ts",
@@ -12,12 +12,12 @@
     "./lib"
   ],
   "scripts": {
-    "build": "rm -rf ./lib/ && mkdir -p ./lib/ && npx yarn lint && tsc",
+    "build": "rm -rf ./lib/ && mkdir -p ./lib/ && tsc",
     "lint": "eslint 'src/**/*.ts?(x)' && prettier --list-different \"**/*.{json,md,js,jsx,ts,tsx}\"",
     "prettier": "prettier --write \"{docs,examples,src}/**/*.{json,md,js,jsx,ts,tsx}\"",
     "postversion": "sh ./post-version.sh",
     "watch:modalize": "npx yarn tsc --watch",
-    "watch:install": "nodemon --config ./nodemon.json --exec sh -c \"sleep 1 && npm run build && npm pack && cd ~/lab/zemil-mobile && npm i /Users/yuli/lab/react-native-modalize/yuliswe-react-native-modalize-2.1.1.tgz\"",
+    "watch:install": "nodemon --config ./nodemon.json --exec sh -c \"sleep 1 && npm run build && npm pack && cd ~/lab/zemil-mobile && npm i /Users/yuli/lab/react-native-modalize/yuliswe-react-native-modalize-2.1.2.tgz\"",
     "watch:expo": "concurrently \"npx yarn watch:modalize\" \"npx yarn cpx 'src/**/*' 'examples/expo/node_modules/react-native-modalize' --watch\"",
     "watch:react-native-navigation": "concurrently \"npx yarn watch:modalize\" \"npx yarn cpx 'src/**/*' 'examples/react-native-navigation/node_modules/react-native-modalize' --watch\"",
     "watch:react-navigation": "concurrently \"npx yarn watch:modalize\" \"npx yarn cpx 'src/**/*' 'examples/react-navigation/node_modules/react-native-modalize' --watch\"",
