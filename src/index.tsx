@@ -20,41 +20,21 @@ import {
   StatusBar,
   View,
 } from 'react-native';
-import {
-  FlatList,
-  PanGestureHandler,
-  PanGestureHandlerStateChangeEvent,
-  ScrollView,
-  State,
-  TapGestureHandler,
-} from 'react-native-gesture-handler';
-
+import { FlatList, Gesture, GestureDetector, ScrollView } from 'react-native-gesture-handler';
 import { Handle } from './components/Handle';
 import { HeaderAndFooter } from './components/HeaderAndFooter';
 import { ModalizeContent } from './components/ModalizeContent';
 import { Overlay } from './components/Overlay';
 import { IHandles, IProps, TClose, TOpen, TPosition } from './options';
 import s from './styles';
-import { isIphoneX } from './utils/devices';
+import { LayoutEvent, PanGestureEvent, PanGestureStateEvent } from './types';
 import { getSpringConfig } from './utils/get-spring-config';
 import { invariant } from './utils/invariant';
 import { isBelowRN65 } from './utils/libraries';
 import { useDimensions } from './utils/use-dimensions';
 
-type ActiveGestureHandlerName =
-  | 'pan-children'
-  | 'pan-component'
-  | 'pan-overlay'
-  | 'tap-overlay'
-  | null;
-
 const AnimatedKeyboardAvoidingView = Animated.createAnimatedComponent(KeyboardAvoidingView);
-/**
- * When scrolling, it happens than beginScrollYValue is not always equal to 0 (top of the ScrollView).
- * Since we use this to trigger the swipe down gesture animation, we allow a small threshold to
- * not dismiss Modalize when we are using the ScrollView and we don't want to dismiss.
- */
-const SCROLL_THRESHOLD = -4;
+// Removed SCROLL_THRESHOLD as it's no longer needed with the new snap logic
 const USE_NATIVE_DRIVER = true;
 const PAN_DURATION = 150;
 
@@ -80,16 +60,14 @@ const DEFAULT_AVOID_KEYBOARD_LIKE_IOS = Platform.select({
   default: true,
 });
 
-const _ModalizeBase = (
-  {
+const _ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>): JSX.Element | null => {
+  // eslint-disable-next-line @typescript-eslint/unbound-method
+  const {
     // Refs
     contentRef,
 
     // Renderers
     children,
-    scrollViewProps,
-    flatListProps,
-    sectionListProps,
     renderChildren,
 
     // Styles
@@ -100,7 +78,7 @@ const _ModalizeBase = (
     childrenStyle,
 
     // Layout
-    snapPoint,
+    snapPoints,
     modalHeight,
     modalTopOffset = DEFAULT_MODAL_TOP_OFFSET,
     alwaysOpen,
@@ -139,35 +117,58 @@ const _ModalizeBase = (
     FloatingComponent,
 
     // Callbacks
-    onOpen,
+    onWillOpen,
     onOpened,
-    onClose,
+    onWillClose,
     onClosed,
     onBackButtonPress,
     onPositionChange,
     onOverlayPress,
     onLayout,
-  }: IProps,
-  ref: React.Ref<React.ReactNode>,
-): JSX.Element | null => {
-  const { height: screenHeight } = useDimensions();
-  const isHandleOutside = handlePosition === 'outside';
-  const handleHeight = withHandle ? 20 : isHandleOutside ? 35 : 20;
-  const fullHeight = screenHeight - modalTopOffset;
-  const computedHeight = fullHeight - handleHeight - (isIphoneX ? 34 : 0);
-  const endHeight = modalHeight || computedHeight;
-  const adjustValue = adjustToContentHeight ? undefined : endHeight;
-  const snaps = snapPoint ? [0, endHeight - snapPoint, endHeight] : [0, endHeight];
+  } = props;
 
-  const [modalHeightValue, setModalHeightValue] = React.useState(adjustValue);
-  const [lastSnap, setLastSnap] = React.useState(snapPoint ? endHeight - snapPoint : 0);
+  const { height: screenHeight } = useDimensions();
+
+  /** Height available for the modal after accounting for top offset (status bar, etc.) */
+  const availableScreenHeight = screenHeight - modalTopOffset;
+
+  /** Maximum height the modal can be (either user-specified or full available height) */
+  const maxModalHeight = modalHeight || availableScreenHeight;
+
+  /** Initial height when modal opens (undefined if adjusting to content height) */
+  const initialModalHeight = adjustToContentHeight ? undefined : maxModalHeight;
+
+  /** Snap points: [closed, snapPoints..., fullOpen] or [closed, fullOpen] */
+  const snaps = React.useMemo(() => {
+    if (!snapPoints || snapPoints.length === 0) {
+      return [0, maxModalHeight];
+    }
+
+    const snapDistances = snapPoints.map(point => maxModalHeight - point);
+
+    // Sort snap points and ensure they're unique
+    const sortedSnaps = [...new Set([0, ...snapDistances, maxModalHeight])].sort((a, b) => a - b);
+
+    return sortedSnaps;
+  }, [snapPoints, maxModalHeight]);
+
+  const [_actualModalHeight, setActualModalHeight] = React.useState(initialModalHeight);
+
+  /** Current actual height of the modal (can change based on content) */
+  const actualModalHeight = _actualModalHeight;
+
+  // Last snap position the modal was at
+  const [lastSnap, setLastSnap] = React.useState(() => {
+    if (!snapPoints || snapPoints.length === 0) return 0;
+    return maxModalHeight - snapPoints[0]; // Use first snap point as initial position
+  });
   const [isVisible, setIsVisible] = React.useState(false);
   const [showContent, setShowContent] = React.useState(true);
   const [enableBounces, setEnableBounces] = React.useState(true);
   const [keyboardToggle, setKeyboardToggle] = React.useState(false);
   const [keyboardHeight, setKeyboardHeight] = React.useState(0);
   const [disableScroll, setDisableScroll] = React.useState(
-    alwaysOpen || snapPoint ? true : undefined,
+    alwaysOpen || snapPoints ? true : undefined,
   );
   const [beginScrollYValue, setBeginScrollYValue] = React.useState(0);
   const [modalPosition, setModalPosition] = React.useState<TPosition>('initial');
@@ -184,17 +185,8 @@ const _ModalizeBase = (
   const reverseBeginScrollY = React.useRef(Animated.multiply(new Animated.Value(-1), beginScrollY))
     .current;
 
-  const tapGestureModalizeRef = React.useRef<TapGestureHandler>(null);
-  const panGestureChildrenRef = React.useRef<PanGestureHandler>(null);
   const contentViewRef = React.useRef<ScrollView | FlatList<any> | SectionList<any>>(null);
-  const tapGestureOverlayRef = React.useRef<TapGestureHandler>(null);
   const backButtonListenerRef = React.useRef<NativeEventSubscription>(null);
-  const activeGestureRef = React.useRef<Record<Exclude<ActiveGestureHandlerName, null>, boolean>>({
-    'pan-children': false,
-    'pan-component': false,
-    'pan-overlay': false,
-    'tap-overlay': false,
-  });
 
   // We diff and get the negative value only. It sometimes go above 0
   // (e.g. 1.5) and creates the flickering on Modalize for a ms
@@ -215,11 +207,11 @@ const _ModalizeBase = (
 
   const handleAnimateClose = useCallback(
     (dest: TClose = 'default', callback?: () => void): void => {
-      const { timing, spring } = closeAnimationConfig;
-      const lastSnapValue = snapPoint ? snaps[1] : 80;
+      const { timing, spring } = closeAnimationConfig as any;
+      const lastSnapValue = snapPoints ? snaps[1] : 80;
       const toInitialAlwaysOpen = dest === 'alwaysOpen' && Boolean(alwaysOpen);
       const toValue =
-        toInitialAlwaysOpen && alwaysOpen ? (modalHeightValue || 0) - alwaysOpen : screenHeight;
+        toInitialAlwaysOpen && alwaysOpen ? (actualModalHeight || 0) - alwaysOpen : screenHeight;
 
       backButtonListenerRef.current?.remove();
       cancelTranslateY.setValue(1);
@@ -282,10 +274,10 @@ const _ModalizeBase = (
     },
     [
       closeAnimationConfig,
-      snapPoint,
+      snapPoints,
       snaps,
       alwaysOpen,
-      modalHeightValue,
+      actualModalHeight,
       screenHeight,
       panGestureAnimatedValue,
       useNativeDriver,
@@ -296,13 +288,13 @@ const _ModalizeBase = (
 
   const handleClose = useCallback(
     (dest?: TClose, callback?: () => void): void => {
-      if (onClose) {
-        onClose();
+      if (onWillClose) {
+        onWillClose();
       }
 
       handleAnimateClose(dest, callback);
     },
-    [onClose, handleAnimateClose],
+    [onWillClose, handleAnimateClose],
   );
 
   const handleBackPress = useCallback((): boolean => {
@@ -349,12 +341,12 @@ const _ModalizeBase = (
     if (dest === 'top') {
       toValue = 0;
     } else if (alwaysOpenValue) {
-      toValue = (modalHeightValue || 0) - alwaysOpenValue;
-    } else if (snapPoint) {
-      toValue = (modalHeightValue || 0) - snapPoint;
+      toValue = (actualModalHeight || 0) - alwaysOpenValue;
+    } else if (snapPoints && snapPoints.length > 0) {
+      toValue = maxModalHeight - snapPoints[0]; // Use first snap point for initial open
     }
 
-    if (panGestureAnimatedValue && (alwaysOpenValue || snapPoint)) {
+    if (panGestureAnimatedValue && (alwaysOpenValue || snapPoints)) {
       toPanValue = 0;
     } else if (
       panGestureAnimatedValue &&
@@ -367,7 +359,7 @@ const _ModalizeBase = (
     setIsVisible(true);
     setShowContent(true);
 
-    if ((alwaysOpenValue && dest !== 'top') || (snapPoint && dest === 'default')) {
+    if ((alwaysOpenValue && dest !== 'top') || (snapPoints && dest === 'default')) {
       newPosition = 'initial';
     } else {
       newPosition = 'top';
@@ -416,10 +408,11 @@ const _ModalizeBase = (
   };
 
   const handleModalizeContentLayout = useCallback(
-    ({ nativeEvent: { layout } }: LayoutChangeEvent): void => {
+    (event: LayoutEvent): void => {
+      const { layout } = event.nativeEvent;
       const value = Math.min(
         layout.height + (!adjustToContentHeight || keyboardHeight ? layout.y : 0),
-        endHeight -
+        maxModalHeight -
           Platform.select({
             ios: 0,
             android: keyboardHeight,
@@ -427,9 +420,9 @@ const _ModalizeBase = (
           }),
       );
 
-      setModalHeightValue(value);
+      setActualModalHeight(value);
     },
-    [adjustToContentHeight, keyboardHeight, endHeight],
+    [adjustToContentHeight, keyboardHeight, maxModalHeight],
   );
 
   const handleBaseLayout = useCallback(
@@ -438,24 +431,24 @@ const _ModalizeBase = (
 
       const max = Array.from(layouts).reduce((acc, cur) => acc + cur?.[1], 0);
       const maxFixed = +max.toFixed(3);
-      const endHeightFixed = +endHeight.toFixed(3);
-      const shorterHeight = maxFixed < endHeightFixed;
+      const maxModalHeightFixed = +maxModalHeight.toFixed(3);
+      const shorterHeight = maxFixed < maxModalHeightFixed;
 
       setDisableScroll(shorterHeight && disableScrollIfPossible);
     },
-    [layouts, endHeight, disableScrollIfPossible],
+    [layouts, maxModalHeight, disableScrollIfPossible],
   );
 
   const handleContentLayout = useCallback(
-    ({ nativeEvent }: LayoutChangeEvent): void => {
+    (event: LayoutEvent): void => {
       if (onLayout) {
-        onLayout(nativeEvent);
+        onLayout(event);
       }
 
       if (alwaysOpen && adjustToContentHeight) {
-        const { height } = nativeEvent.layout;
+        const { height } = event.nativeEvent.layout;
 
-        return setModalHeightValue(height);
+        return setActualModalHeight(height);
       }
 
       // We don't want to disable the scroll if we are not using adjustToContentHeight props
@@ -463,7 +456,7 @@ const _ModalizeBase = (
         return;
       }
 
-      handleBaseLayout('content', nativeEvent.layout.height);
+      handleBaseLayout('content', event.nativeEvent.layout.height);
     },
     [onLayout, alwaysOpen, adjustToContentHeight, handleBaseLayout],
   );
@@ -480,11 +473,7 @@ const _ModalizeBase = (
   );
 
   const handleComponentLayout = useCallback(
-    (
-      { nativeEvent }: LayoutChangeEvent,
-      name: 'header' | 'footer' | 'floating',
-      absolute: boolean,
-    ): void => {
+    (event: LayoutChangeEvent, name: 'header' | 'footer' | 'floating', absolute: boolean): void => {
       /**
        * We don't want to disable the scroll if we are not using adjustToContentHeight props.
        * Also, if the component is in absolute positioning we don't want to take in
@@ -494,123 +483,122 @@ const _ModalizeBase = (
         return;
       }
 
-      handleBaseLayout(name, nativeEvent.layout.height);
+      handleBaseLayout(name, event.nativeEvent.layout.height);
     },
     [adjustToContentHeight, handleBaseLayout],
   );
 
-  // Factory function that creates gesture state change handlers
-  const createGestureStateHandler = useCallback(
-    (handlerName: Exclude<ActiveGestureHandlerName, null>) => {
-      return ({ nativeEvent }: PanGestureHandlerStateChangeEvent): void => {
-        const { timing } = closeAnimationConfig;
-        const { velocityY, translationY, state } = nativeEvent;
-        const negativeReverseScroll =
-          modalPosition === 'top' &&
-          beginScrollYValue >= (snapPoint ? 0 : SCROLL_THRESHOLD) &&
-          translationY < 0;
-        const thresholdProps = translationY > threshold && beginScrollYValue === 0;
-        const closeThreshold = velocity
-          ? (beginScrollYValue <= 20 && velocityY >= velocity) || thresholdProps
-          : thresholdProps;
-        let enableBouncesValue = true;
+  // V2 Gesture definitions with proper composition
+  const panGestureModalize = React.useMemo(
+    () =>
+      Gesture.Pan()
+        .enabled(panGestureEnabled)
+        .shouldCancelWhenOutside(false)
+        .onBegin(() => {
+          console.log('🔴 panGestureModalize onBegin');
 
-        // Track active gesture handler
-        if (state === State.ACTIVE) {
-          activeGestureRef.current[handlerName] = true;
-          // jconsole.log(`🔵 Gesture ACTIVE: ${handlerName}`, activeGestureRef.current);
-        } else if (state === State.END || state === State.CANCELLED || state === State.FAILED) {
-          activeGestureRef.current[handlerName] = false;
-          // jconsole.log(`🔴 Gesture ENDED: ${handlerName}`, activeGestureRef.current);
-        }
-
-        // We make sure to reset the value if we are dragging from the children
-        if (handlerName !== 'pan-component' && (cancelTranslateY as any)._value === 0) {
-          componentTranslateY.setValue(0);
-        }
-
-        /*
-         * When the pan gesture began we check the position of the ScrollView "cursor".
-         * We cancel the translation animation if the ScrollView is not scrolled to the top
-         */
-        if (nativeEvent.oldState === State.BEGAN) {
+          // Handle pan begin for main modalize
           setCancelClose(false);
 
-          // Only allow pan gesture to close modal if scroll is at top
-          if (
-            (!isScrollAtTop && activeGestureRef.current['pan-children']) ||
-            (!closeSnapPointStraightEnabled && snapPoint
-              ? beginScrollYValue > 0
-              : beginScrollYValue > 0 || negativeReverseScroll)
-          ) {
-            // jconsole.log('🔴 setCancelClose(true)');
-            setCancelClose(true);
-            translateY.setValue(0);
-            dragY.setValue(0);
-            cancelTranslateY.setValue(0);
-            enableBouncesValue = true;
-          } else {
-            cancelTranslateY.setValue(1);
-            enableBouncesValue = false;
+          // Reset animation values at the start of each gesture
+          dragY.setValue(0);
+          // Don't reset translateY - it should maintain current position (snap point)
+          cancelTranslateY.setValue(1);
 
-            if (!tapGestureEnabled) {
-              setDisableScroll(
-                (Boolean(snapPoint) || Boolean(alwaysOpen)) && modalPosition === 'initial',
-              );
-            }
+          console.log('beginScrollYValue', beginScrollYValue);
+
+          cancelTranslateY.setValue(1);
+
+          if (!tapGestureEnabled) {
+            setDisableScroll(
+              (Boolean(snapPoints) || Boolean(alwaysOpen)) && modalPosition === 'initial',
+            );
           }
-        }
+        })
+        .onChange((event: PanGestureEvent) => {
+          const { translationY } = event;
 
-        const enableBounces = alwaysOpen
-          ? beginScrollYValue > 0 || translationY < 0
-          : enableBouncesValue && !isScrollAtTop;
+          // Update dragY for animation
+          dragY.setValue(translationY);
 
-        setEnableBounces(enableBounces);
+          if (panGestureAnimatedValue) {
+            const offset = alwaysOpen ?? snapPoints?.[0] ?? 0;
+            const diff = Math.abs(translationY / (maxModalHeight - offset));
+            const y = translationY <= 0 ? diff : 1 - diff;
+            let value: number; // between 0 and 1
 
-        if (nativeEvent.oldState === State.ACTIVE) {
+            // Prevent the modal from going below its initial position
+            if (modalPosition === 'initial' && translationY > 0) {
+              value = 0;
+            }
+
+            // Prevent the modal from going above the top position
+            else if (modalPosition === 'top' && translationY <= 0) {
+              value = 1;
+            } else {
+              value = y;
+            }
+
+            panGestureAnimatedValue.setValue(value);
+          }
+        })
+        .onEnd((event: PanGestureStateEvent) => {
+          console.log('🔴 panGestureModalize onEnd');
+
+          const { timing } = closeAnimationConfig;
+          const { velocityY, translationY } = event;
+          // Removed negativeReverseScroll as it's no longer needed with the new snap logic
+          const thresholdProps = translationY > threshold && beginScrollYValue === 0;
+          const closeThreshold = velocity
+            ? (beginScrollYValue <= 20 && velocityY >= velocity) || thresholdProps
+            : thresholdProps;
+
+          const enableBounces = alwaysOpen
+            ? beginScrollYValue > 0 || translationY < 0
+            : !isScrollAtTop;
+
+          setEnableBounces(enableBounces);
+
           const toValue = translationY - beginScrollYValue;
-          let destSnapPoint = 0;
+          let destSnapPoint = lastSnap; // Start with current position
 
-          if (snapPoint || alwaysOpen) {
+          if (snapPoints || alwaysOpen) {
             const endOffsetY = lastSnap + toValue + dragToss * velocityY;
 
-            /**
-             * snapPoint and alwaysOpen use both an array of points to define the first open state and the final state.
-             */
+            // Find the nearest snap point
+            let nearestSnap = snaps[0]; // Start with first snap point
+            let minDistance = Math.abs(snaps[0] - endOffsetY);
+
             snaps.forEach((snap: number) => {
               const distFromSnap = Math.abs(snap - endOffsetY);
-              const diffPoint = Math.abs(destSnapPoint - endOffsetY);
 
-              // For snapPoint
-              if (distFromSnap < diffPoint && !alwaysOpen) {
-                if (closeSnapPointStraightEnabled) {
-                  if (modalPosition === 'initial' && negativeReverseScroll) {
-                    destSnapPoint = snap;
-                    willCloseModalize = false;
-                  }
-
-                  if (snap === endHeight) {
-                    destSnapPoint = snap;
-                    willCloseModalize = true;
-                    handleClose();
-                  }
-                } else {
-                  destSnapPoint = snap;
-                  willCloseModalize = false;
-
-                  if (snap === endHeight) {
-                    willCloseModalize = true;
-                    handleClose();
-                  }
-                }
-              }
-
-              // For alwaysOpen props
-              if (distFromSnap < diffPoint && alwaysOpen && beginScrollYValue <= 0) {
-                destSnapPoint = (modalHeightValue || 0) - alwaysOpen;
-                willCloseModalize = false;
+              // Find the closest snap point
+              if (distFromSnap < minDistance) {
+                minDistance = distFromSnap;
+                nearestSnap = snap;
               }
             });
+
+            // Set destination to closest snap point
+            destSnapPoint = nearestSnap;
+
+            // Handle special cases
+            if (!alwaysOpen) {
+              if (nearestSnap === maxModalHeight) {
+                // Snap to closed position - close the modal
+                willCloseModalize = true;
+                handleClose();
+              } else {
+                // Snap to snap point or full open - don't close
+                willCloseModalize = false;
+              }
+            }
+
+            // For alwaysOpen props
+            if (alwaysOpen && beginScrollYValue <= 0) {
+              destSnapPoint = (actualModalHeight || 0) - alwaysOpen;
+              willCloseModalize = false;
+            }
           } else if (closeThreshold && !alwaysOpen && !cancelClose) {
             willCloseModalize = true;
             handleClose();
@@ -667,98 +655,75 @@ const _ModalizeBase = (
               setModalPosition(modalPositionValue);
             }
           }
-        }
-      };
-    },
+        })
+        .runOnJS(true),
     [
-      closeAnimationConfig,
-      snapPoint,
-      threshold,
-      velocity,
-      dragToss,
+      panGestureEnabled,
       modalPosition,
       beginScrollYValue,
+      snapPoints,
       closeSnapPointStraightEnabled,
       isScrollAtTop,
       alwaysOpen,
-      endHeight,
+      tapGestureEnabled,
+      closeAnimationConfig,
+      threshold,
+      velocity,
+      dragToss,
+      maxModalHeight,
       lastSnap,
       panGestureAnimatedValue,
       useNativeDriver,
       onPositionChange,
       adjustToContentHeight,
-      tapGestureEnabled,
+      handleClose,
+      actualModalHeight,
+      snaps,
+      overlay,
+      translateY,
+      dragY,
+      setEnableBounces,
+      setLastSnap,
+      setBeginScrollYValue,
+      beginScrollY,
+      setCancelClose,
+      setDisableScroll,
+      setModalPosition,
+    ],
+  );
+
+  const tapGestureOverlay = React.useMemo(
+    () =>
+      Gesture.Tap()
+        .enabled(closeOnOverlayTap !== undefined ? closeOnOverlayTap : panGestureEnabled)
+        .onStart(() => {
+          if (onOverlayPress) {
+            onOverlayPress();
+          }
+          const dest = !!alwaysOpen ? 'alwaysOpen' : 'default';
+          if (!willCloseModalize) {
+            handleClose(dest);
+          }
+        })
+        .runOnJS(true),
+    [
+      closeOnOverlayTap,
+      panGestureEnabled,
+      onOverlayPress,
+      alwaysOpen,
+      willCloseModalize,
       handleClose,
     ],
   );
 
-  const handlePanComponentStateChange = createGestureStateHandler('pan-component');
-  const handlePanChildrenStateChange = createGestureStateHandler('pan-children');
-
-  const handlePanStateChange = useCallback(
-    ({ nativeEvent }: PanGestureHandlerStateChangeEvent): void => {
-      const { state } = nativeEvent;
-
-      // Track active gesture handler
-      if (state === State.ACTIVE) {
-        activeGestureRef.current['pan-component'] = true;
-        // jconsole.log(`🔵 Gesture ACTIVE: pan-component`, activeGestureRef.current);
-      } else if (state === State.END || state === State.CANCELLED || state === State.FAILED) {
-        activeGestureRef.current['pan-component'] = false;
-        // jconsole.log(`🔴 Gesture ENDED: pan-component`, activeGestureRef.current);
-      }
-
-      // If we drag from the HeaderComponent/FooterComponent/FloatingComponent we allow the translation animation
-      if (nativeEvent.oldState === State.BEGAN) {
-        componentTranslateY.setValue(1);
-        beginScrollY.setValue(0);
-      }
-
-      handlePanComponentStateChange({ nativeEvent });
-    },
-    [handlePanComponentStateChange],
-  );
-
-  // Helper function to get currently active gesture handler
-  // const getActiveGestureHandler = (): ActiveGestureHandlerName => {
-  //   const activeGestures = Object.entries(activeGestureRef.current).filter(
-  //     ([_, isActive]) => isActive,
-  //   );
-  //   return activeGestures.length > 0 ? (activeGestures[0][0] as ActiveGestureHandlerName) : null;
-  // };
-
-  const handleGestureEvent = useCallback(
-    Animated.event([{ nativeEvent: { translationY: dragY } }], {
-      useNativeDriver: USE_NATIVE_DRIVER,
-      listener: ({ nativeEvent: { translationY } }: PanGestureHandlerStateChangeEvent) => {
-        if (panGestureAnimatedValue) {
-          const offset = alwaysOpen ?? snapPoint ?? 0;
-          const diff = Math.abs(translationY / (endHeight - offset));
-          const y = translationY <= 0 ? diff : 1 - diff;
-          let value: number; // between 0 and 1
-
-          // Prevent the modal from going below its initial position
-          if (modalPosition === 'initial' && translationY > 0) {
-            value = 0;
-          }
-          // Prevent the modal from going above the top position
-          else if (modalPosition === 'top' && translationY <= 0) {
-            value = 1;
-          } else {
-            value = y;
-          }
-
-          panGestureAnimatedValue.setValue(value);
-        }
-      },
-    }),
-    [panGestureAnimatedValue, alwaysOpen, snapPoint, endHeight, modalPosition],
-  );
+  // Separate gesture detectors:
+  // 1. Pan gesture for all swipe actions (modal content and overlay)
+  // 2. Tap gesture only for overlay closing
 
   React.useImperativeHandle(ref, () => ({
     open(dest?: TOpen): void {
-      if (onOpen) {
-        onOpen();
+      if (onWillOpen) {
+        onWillOpen();
       }
 
       handleAnimateOpen(alwaysOpen, dest);
@@ -770,35 +735,22 @@ const _ModalizeBase = (
   }));
 
   React.useEffect(() => {
-    if (alwaysOpen && (modalHeightValue || adjustToContentHeight)) {
+    if (alwaysOpen && (actualModalHeight || adjustToContentHeight)) {
       handleAnimateOpen(alwaysOpen);
     }
-  }, [alwaysOpen, modalHeightValue]);
+  }, [alwaysOpen, actualModalHeight]);
 
   React.useEffect(() => {
     invariant(
       modalHeight && adjustToContentHeight,
       `You can't use both 'modalHeight' and 'adjustToContentHeight' props at the same time. Only choose one of the two.`,
     );
-    invariant(
-      (scrollViewProps || children) && flatListProps,
-      `You have defined 'flatListProps' along with 'scrollViewProps' or 'children' props. Remove 'scrollViewProps' or 'children' or 'flatListProps' to fix the error.`,
-    );
-    invariant(
-      (scrollViewProps || children) && sectionListProps,
-      `You have defined 'sectionListProps'  along with 'scrollViewProps' or 'children' props. Remove 'scrollViewProps' or 'children' or 'sectionListProps' to fix the error.`,
-    );
-  }, [
-    modalHeight,
-    adjustToContentHeight,
-    scrollViewProps,
-    children,
-    flatListProps,
-    sectionListProps,
-  ]);
+    // Note: Removed validation for scrollViewProps, flatListProps, sectionListProps
+    // as we now only support renderChildren
+  }, [modalHeight, adjustToContentHeight, children]);
 
   React.useEffect(() => {
-    setModalHeightValue(adjustValue);
+    setActualModalHeight(initialModalHeight);
   }, [adjustToContentHeight, modalHeight, screenHeight]);
 
   React.useEffect(() => {
@@ -839,13 +791,13 @@ const _ModalizeBase = (
       s.modalize__content,
       modalStyle,
       {
-        height: modalHeightValue,
-        maxHeight: endHeight,
+        height: actualModalHeight,
+        maxHeight: maxModalHeight,
         transform: [
           {
             translateY: value.interpolate({
-              inputRange: [-40, 0, endHeight],
-              outputRange: [0, 0, endHeight],
+              inputRange: [-40, 0, maxModalHeight],
+              outputRange: [0, 0, maxModalHeight],
               extrapolate: 'clamp',
             }),
           },
@@ -863,12 +815,8 @@ const _ModalizeBase = (
       style={[s.modalize, rootStyle]}
       pointerEvents={alwaysOpen || !withOverlay ? 'box-none' : 'auto'}
     >
-      <TapGestureHandler
-        ref={tapGestureModalizeRef}
-        maxDurationMs={tapGestureEnabled ? 100000 : 50}
-        maxDeltaY={lastSnap}
-        enabled={panGestureEnabled}
-      >
+      {/* GestureDetector for pan gestures - handles all swipe actions */}
+      <GestureDetector gesture={panGestureModalize}>
         <View style={s.modalize__wrapper} pointerEvents="box-none">
           {showContent && (
             <AnimatedKeyboardAvoidingView {...keyboardAvoidingViewProps}>
@@ -876,84 +824,56 @@ const _ModalizeBase = (
                 withHandle={withHandle}
                 handlePosition={handlePosition}
                 handleStyle={handleStyle}
-                panGestureEnabled={panGestureEnabled}
-                tapGestureModalizeRef={tapGestureModalizeRef}
-                handleGestureEvent={handleGestureEvent}
-                handlePanStateChange={handlePanStateChange}
               />
               <HeaderAndFooter
                 component={HeaderComponent}
                 name="header"
-                panGestureEnabled={panGestureEnabled}
                 panGestureComponentEnabled={panGestureComponentEnabled}
-                handleGestureEvent={handleGestureEvent}
-                handlePanStateChange={handlePanStateChange}
                 handleComponentLayout={handleComponentLayout}
               />
               <ModalizeContent
-                scrollViewProps={scrollViewProps}
-                flatListProps={flatListProps}
-                sectionListProps={sectionListProps}
                 renderChildren={renderChildren}
                 childrenStyle={childrenStyle}
                 adjustToContentHeight={adjustToContentHeight}
                 contentRef={contentRef}
                 contentViewRef={contentViewRef}
-                panGestureChildrenRef={panGestureChildrenRef}
-                tapGestureModalizeRef={tapGestureModalizeRef}
                 handleContentLayout={handleContentLayout}
                 handleScroll={handleScroll}
-                handleGestureEvent={handleGestureEvent}
-                handlePanChildrenStateChange={handlePanChildrenStateChange}
                 enableBounces={enableBounces}
                 keyboardToggle={keyboardToggle}
                 disableScroll={disableScroll}
-                panGestureEnabled={panGestureEnabled}
               >
                 {children}
               </ModalizeContent>
               <HeaderAndFooter
                 component={FooterComponent}
                 name="footer"
-                panGestureEnabled={panGestureEnabled}
                 panGestureComponentEnabled={panGestureComponentEnabled}
-                handleGestureEvent={handleGestureEvent}
-                handlePanStateChange={handlePanStateChange}
                 handleComponentLayout={handleComponentLayout}
               />
             </AnimatedKeyboardAvoidingView>
           )}
 
-          <Overlay
-            withOverlay={withOverlay}
-            alwaysOpen={alwaysOpen}
-            modalPosition={modalPosition}
-            showContent={showContent}
-            overlayStyle={overlayStyle}
-            panGestureEnabled={panGestureEnabled}
-            closeOnOverlayTap={closeOnOverlayTap}
-            tapGestureModalizeRef={tapGestureModalizeRef}
-            tapGestureOverlayRef={tapGestureOverlayRef}
-            handleGestureEvent={handleGestureEvent}
-            createGestureStateHandler={createGestureStateHandler}
-            onOverlayPress={onOverlayPress}
-            handleClose={handleClose}
-            willCloseModalize={willCloseModalize}
-            overlay={overlay}
-            activeGestureRef={activeGestureRef}
+          <HeaderAndFooter
+            component={FloatingComponent}
+            name="floating"
+            panGestureComponentEnabled={panGestureComponentEnabled}
+            handleComponentLayout={handleComponentLayout}
           />
-        </View>
-      </TapGestureHandler>
 
-      <HeaderAndFooter
-        component={FloatingComponent}
-        name="floating"
-        panGestureEnabled={panGestureEnabled}
-        panGestureComponentEnabled={panGestureComponentEnabled}
-        handleGestureEvent={handleGestureEvent}
-        handlePanStateChange={handlePanStateChange}
-        handleComponentLayout={handleComponentLayout}
-      />
+          {/* Overlay with separate tap gesture detector */}
+          <GestureDetector gesture={tapGestureOverlay}>
+            <Overlay
+              withOverlay={withOverlay}
+              alwaysOpen={alwaysOpen}
+              modalPosition={modalPosition}
+              showContent={showContent}
+              overlayStyle={overlayStyle}
+              overlay={overlay}
+            />
+          </GestureDetector>
+        </View>
+      </GestureDetector>
     </View>
   );
 
@@ -989,3 +909,8 @@ export type Modalize = IHandles;
 
 export const Modalize = React.memo(React.forwardRef(_ModalizeBase));
 export * from './utils/use-modalize';
+
+export type { HandleProps } from './components/Handle';
+export type { HeaderAndFooterProps } from './components/HeaderAndFooter';
+export type { ModalizeContentProps } from './components/ModalizeContent';
+export type { OverlayProps } from './components/Overlay';

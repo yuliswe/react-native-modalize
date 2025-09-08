@@ -1,29 +1,18 @@
 import * as React from 'react';
 import { Animated, View } from 'react-native';
-import { PanGestureHandler, PanGestureHandlerStateChangeEvent } from 'react-native-gesture-handler';
+// Handle component no longer needs gesture handling - main component handles all gestures
 
 import { TStyle } from '../options';
 import s from '../styles';
+// import { PanGestureEvent, PanGestureStateEvent } from '../types'; // Removed as unused
 
-interface HandleProps {
+export interface HandleProps {
   withHandle: boolean;
   handlePosition: 'inside' | 'outside';
   handleStyle?: TStyle;
-  panGestureEnabled: boolean;
-  tapGestureModalizeRef: React.RefObject<any>;
-  handleGestureEvent: any;
-  handlePanStateChange: (event: PanGestureHandlerStateChangeEvent) => void;
 }
 
-function _Handle({
-  withHandle,
-  handlePosition,
-  handleStyle,
-  panGestureEnabled,
-  tapGestureModalizeRef,
-  handleGestureEvent,
-  handlePanStateChange,
-}: HandleProps) {
+function _Handle({ withHandle, handlePosition, handleStyle }: HandleProps) {
   const handleStyles: (TStyle | undefined)[] = [s.handle];
   const shapeStyles: (TStyle | undefined)[] = [s.handle__shape, handleStyle];
   const isHandleOutside = handlePosition === 'outside';
@@ -38,17 +27,9 @@ function _Handle({
   }
 
   return (
-    <PanGestureHandler
-      enabled={panGestureEnabled}
-      simultaneousHandlers={tapGestureModalizeRef}
-      shouldCancelWhenOutside={false}
-      onGestureEvent={handleGestureEvent}
-      onHandlerStateChange={handlePanStateChange}
-    >
-      <Animated.View style={handleStyles}>
-        <View style={shapeStyles} />
-      </Animated.View>
-    </PanGestureHandler>
+    <Animated.View style={handleStyles}>
+      <View style={shapeStyles} />
+    </Animated.View>
   );
 }
 

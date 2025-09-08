@@ -2,11 +2,7 @@ import * as React from 'react';
 import {
   Animated,
   ViewStyle,
-  ScrollViewProps,
-  FlatListProps,
-  SectionListProps,
   EasingFunction,
-  LayoutRectangle,
   SectionList,
   StyleProp,
   ModalProps,
@@ -14,9 +10,9 @@ import {
 import {
   ScrollView as RNGHScrollView,
   FlatList as RNGHFlatList,
-  TapGestureHandler,
-  PanGestureHandler,
 } from 'react-native-gesture-handler';
+
+import { LayoutEvent, ScrollEvent } from './types';
 
 export type TOpen = 'default' | 'top';
 export type TClose = 'default' | 'alwaysOpen';
@@ -56,20 +52,8 @@ export interface IProps<ListItem = any> {
    */
   children?: React.ReactNode;
 
-  /**
-   * An object to pass any of the react-native ScrollView's props.
-   */
-  scrollViewProps?: ScrollViewProps;
-
-  /**
-   * An object to pass any of the react-native FlatList's props.
-   */
-  flatListProps?: FlatListProps<ListItem>;
-
-  /**
-   * An object to pass any of the react-native SectionList's props.
-   */
-  sectionListProps?: SectionListProps<ListItem>;
+  // Note: Removed scrollViewProps, flatListProps, sectionListProps
+  // Use renderChildren to provide your own scrollable components
 
   /**
    * A function that renders custom content with scroll/gesture event props
@@ -78,16 +62,14 @@ export interface IProps<ListItem = any> {
     ref: React.RefObject<RNGHScrollView | RNGHFlatList<ListItem> | SectionList<ListItem>>;
     bounces: boolean;
     scrollEventThrottle: number;
-    onLayout: (event: any) => void;
+    onLayout: (event: LayoutEvent) => void;
     scrollEnabled: boolean;
     keyboardDismissMode:
       | Animated.Value
       | Animated.AnimatedInterpolation
       | 'interactive'
       | 'on-drag';
-    onScroll: (event: any) => void;
-    waitFor: React.RefObject<TapGestureHandler>;
-    simultaneousHandlers: React.RefObject<PanGestureHandler>[];
+    onScroll: (event: ScrollEvent) => void;
     children: React.ReactNode;
   }) => JSX.Element;
 
@@ -117,9 +99,10 @@ export interface IProps<ListItem = any> {
   childrenStyle?: TStyle;
 
   /**
-   * A number that will enable the snapping feature and create an intermediate point before opening the modal to full screen.
+   * An array of numbers that will enable the snapping feature and create intermediate points before opening the modal to full screen.
+   * Each number represents the height of the modal at that snap point.
    */
-  snapPoint?: number;
+  snapPoints?: number[];
 
   /**
    * A number to define the modal's total height.
@@ -292,7 +275,7 @@ export interface IProps<ListItem = any> {
   /**
    * Callback function when the `open` method is triggered.
    */
-  onOpen?(): void;
+  onWillOpen?(): void;
 
   /**
    * Callback function when the modal is opened.
@@ -302,7 +285,7 @@ export interface IProps<ListItem = any> {
   /**
    * Callback function when the `close` method is triggered.
    */
-  onClose?(): void;
+  onWillClose?(): void;
 
   /**
    * Callback function when the modal is closed.
@@ -331,7 +314,7 @@ export interface IProps<ListItem = any> {
   /**
    * Callback used when you press the overlay.
    */
-  onLayout?(nativeEvent: { layout: LayoutRectangle }): void;
+  onLayout?(event: LayoutEvent): void;
 }
 
 export interface IHandles {

@@ -1,16 +1,14 @@
 import * as React from 'react';
 import { Animated, LayoutChangeEvent, StyleSheet, ViewStyle } from 'react-native';
-import { PanGestureHandler, PanGestureHandlerStateChangeEvent } from 'react-native-gesture-handler';
+// HeaderAndFooter component no longer needs gesture handling - main component handles all gestures
 
+// import { PanGestureEvent, PanGestureStateEvent } from '../types'; // Removed as unused
 import { isAndroid } from '../utils/devices';
 
-interface HeaderAndFooterProps {
+export interface HeaderAndFooterProps {
   component: React.ReactNode;
   name: 'header' | 'footer' | 'floating';
-  panGestureEnabled: boolean;
   panGestureComponentEnabled: boolean;
-  handleGestureEvent: any;
-  handlePanStateChange: (event: PanGestureHandlerStateChangeEvent) => void;
   handleComponentLayout: (
     event: LayoutChangeEvent,
     name: 'header' | 'footer' | 'floating',
@@ -24,10 +22,7 @@ const renderElement = (Element: React.ReactNode): JSX.Element =>
 function _HeaderAndFooter({
   component,
   name,
-  panGestureEnabled,
   panGestureComponentEnabled,
-  handleGestureEvent,
-  handlePanStateChange,
   handleComponentLayout,
 }: HeaderAndFooterProps) {
   if (!component) {
@@ -50,19 +45,12 @@ function _HeaderAndFooter({
   const zIndex: number | undefined = obj?.zIndex;
 
   return (
-    <PanGestureHandler
-      enabled={panGestureEnabled}
-      shouldCancelWhenOutside={false}
-      onGestureEvent={handleGestureEvent}
-      onHandlerStateChange={handlePanStateChange}
+    <Animated.View
+      style={{ zIndex }}
+      onLayout={(e: LayoutChangeEvent): void => handleComponentLayout(e, name, absolute)}
     >
-      <Animated.View
-        style={{ zIndex }}
-        onLayout={(e: LayoutChangeEvent): void => handleComponentLayout(e, name, absolute)}
-      >
-        {tag}
-      </Animated.View>
-    </PanGestureHandler>
+      {tag}
+    </Animated.View>
   );
 }
 
