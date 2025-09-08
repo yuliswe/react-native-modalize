@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { Animated } from 'react-native';
+import Animated, { SharedValue, useAnimatedStyle } from 'react-native-reanimated';
 // Overlay component no longer needs gesture handling - main component handles all gestures
 
 import { TStyle } from '../options';
@@ -9,10 +9,10 @@ import s from '../styles';
 export interface OverlayProps {
   withOverlay: boolean;
   alwaysOpen: number | undefined;
-  modalPosition: string;
+  modalPosition: SharedValue<'initial' | 'top'>;
   showContent: boolean;
   overlayStyle?: TStyle;
-  overlay?: Animated.Value;
+  overlay?: SharedValue<number>;
 }
 
 function _Overlay({
@@ -23,29 +23,27 @@ function _Overlay({
   overlayStyle,
   overlay,
 }: OverlayProps) {
-  const pointerEvents =
-    alwaysOpen && (modalPosition === 'initial' || !modalPosition) ? 'box-none' : 'auto';
+  const animatedStyle = useAnimatedStyle(() => {
+    const currentPosition = modalPosition.value;
+    const pointerEvents =
+      alwaysOpen && (currentPosition === 'initial' || !currentPosition) ? 'box-none' : 'auto';
+
+    const opacity = overlay ? overlay.value : 0;
+
+    return {
+      opacity,
+      pointerEvents,
+    };
+  });
 
   if (!withOverlay) {
     return null;
   }
 
   return (
-    <Animated.View style={s.overlay} pointerEvents={pointerEvents}>
+    <Animated.View style={s.overlay}>
       {showContent && (
-        <Animated.View
-          style={[
-            s.overlay__background,
-            overlayStyle,
-            {
-              opacity: overlay?.interpolate({
-                inputRange: [0, 1],
-                outputRange: [0, 1],
-              }),
-            },
-          ]}
-          pointerEvents={pointerEvents}
-        />
+        <Animated.View style={[s.overlay__background, overlayStyle, animatedStyle]} />
       )}
     </Animated.View>
   );

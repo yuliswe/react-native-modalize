@@ -17,8 +17,8 @@
     "removeComments": false,
     "sourceMap": false,
     "strictPropertyInitialization": false,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true
+    "noUnusedLocals": false,
+    "noUnusedParameters": false
   },
   "include": ["src"]
 }

@@ -54,20 +54,34 @@ export function _ModalizeContent({
     | 'on-drag' = isIos ? 'interactive' : 'on-drag';
 
   const scrollEnabled = keyboardToggle || !disableScroll;
-  const scrollEventThrottle = 16;
+  const scrollEventThrottle = 16; // Standard 60fps scrolling
 
-  const opts = {
-    ref: composeRefs(contentViewRef, contentRef) as React.RefObject<any>,
-    bounces: enableBounces,
-    scrollEventThrottle,
-    onLayout: handleContentLayout,
-    scrollEnabled: scrollEnabled,
-    keyboardDismissMode,
-    onScroll: handleScroll,
-  };
+  const opts = React.useMemo(
+    () => ({
+      ref: composeRefs(contentViewRef, contentRef) as React.RefObject<any>,
+      bounces: enableBounces,
+      scrollEventThrottle,
+      onLayout: handleContentLayout,
+      scrollEnabled: scrollEnabled,
+      keyboardDismissMode,
+      onScroll: handleScroll,
+    }),
+    [
+      contentViewRef,
+      contentRef,
+      enableBounces,
+      scrollEventThrottle,
+      handleContentLayout,
+      scrollEnabled,
+      keyboardDismissMode,
+      handleScroll,
+    ],
+  );
 
-  // Use renderChildren if provided, otherwise render children directly
-  const contentElement = renderChildren ? renderChildren({ ...opts, children }) : children;
+  // Memoize the content element to prevent unnecessary re-renders
+  const contentElement = React.useMemo(() => {
+    return renderChildren ? renderChildren({ ...opts, children }) : children;
+  }, [renderChildren, opts, children]);
 
   return <Animated.View style={[style, childrenStyle]}>{contentElement}</Animated.View>;
 }

@@ -4,7 +4,6 @@
  */
 import React, { useCallback } from 'react';
 import {
-  Animated,
   BackHandler,
   Easing,
   EmitterSubscription,
@@ -14,13 +13,23 @@ import {
   KeyboardEvent,
   LayoutChangeEvent,
   Modal,
-  NativeEventSubscription,
   Platform,
   SectionList,
   StatusBar,
   View,
+  type NativeEventSubscription,
 } from 'react-native';
 import { FlatList, Gesture, GestureDetector, ScrollView } from 'react-native-gesture-handler';
+import Animated, {
+  clamp,
+  Easing as ReanimatedEasing,
+  runOnJS,
+  runOnUI,
+  useAnimatedStyle,
+  useDerivedValue,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 import { Handle } from './components/Handle';
 import { HeaderAndFooter } from './components/HeaderAndFooter';
 import { ModalizeContent } from './components/ModalizeContent';
@@ -28,7 +37,6 @@ import { Overlay } from './components/Overlay';
 import { IHandles, IProps, TClose, TOpen, TPosition } from './options';
 import s from './styles';
 import { LayoutEvent, PanGestureEvent, PanGestureStateEvent } from './types';
-import { getSpringConfig } from './utils/get-spring-config';
 import { invariant } from './utils/invariant';
 import { isBelowRN65 } from './utils/libraries';
 import { useDimensions } from './utils/use-dimensions';
@@ -38,14 +46,13 @@ const AnimatedKeyboardAvoidingView = Animated.createAnimatedComponent(KeyboardAv
 const USE_NATIVE_DRIVER = true;
 const PAN_DURATION = 150;
 
-// Memoized constants
+// Animation constants
 const DEFAULT_OPEN_ANIMATION_CONFIG = {
-  timing: { duration: 240, easing: Easing.ease },
-  spring: { speed: 14, bounciness: 4 },
+  timing: { duration: 280, easing: Easing.ease },
 };
 
 const DEFAULT_CLOSE_ANIMATION_CONFIG = {
-  timing: { duration: 240, easing: Easing.ease },
+  timing: { duration: 280, easing: Easing.linear },
 };
 
 const DEFAULT_MODAL_TOP_OFFSET = Platform.select({
@@ -103,6 +110,7 @@ const _ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>): JSX.Elem
     threshold = 120,
     velocity = 2800,
     panGestureAnimatedValue,
+    translateY: externalTranslateY,
     useNativeDriver = true,
 
     // Elements visibilities
@@ -144,12 +152,15 @@ const _ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>): JSX.Elem
       return [0, maxModalHeight];
     }
 
-    const snapDistances = snapPoints.map(point => maxModalHeight - point);
+    // Pre-allocate array with known size to avoid dynamic resizing
+    const snapDistances = new Array(snapPoints.length);
+    for (let i = 0; i < snapPoints.length; i++) {
+      snapDistances[i] = maxModalHeight - snapPoints[i];
+    }
 
-    // Sort snap points and ensure they're unique
-    const sortedSnaps = [...new Set([0, ...snapDistances, maxModalHeight])].sort((a, b) => a - b);
-
-    return sortedSnaps;
+    // Use Set for deduplication, then convert back to sorted array
+    const uniqueSnaps = new Set([0, ...snapDistances, maxModalHeight]);
+    return Array.from(uniqueSnaps).sort((a, b) => a - b);
   }, [snapPoints, maxModalHeight]);
 
   const [_actualModalHeight, setActualModalHeight] = React.useState(initialModalHeight);
@@ -157,120 +168,136 @@ const _ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>): JSX.Elem
   /** Current actual height of the modal (can change based on content) */
   const actualModalHeight = _actualModalHeight;
 
-  // Last snap position the modal was at
-  const [lastSnap, setLastSnap] = React.useState(() => {
-    if (!snapPoints || snapPoints.length === 0) return 0;
-    return maxModalHeight - snapPoints[0]; // Use first snap point as initial position
-  });
+  // UI thread only states - moved to shared values
+  const enableBounces = useSharedValue(true);
+  const beginScrollYValue = useSharedValue(0);
+  const isScrollAtTop = useSharedValue(true);
+  const lastSnap = useSharedValue(0);
+  const modalPosition = useSharedValue<TPosition>('initial');
+
+  // Initialize lastSnap based on snap points
+  React.useEffect(() => {
+    if (snapPoints && snapPoints.length > 0) {
+      lastSnap.value = maxModalHeight - snapPoints[0];
+    }
+  }, [snapPoints, maxModalHeight, lastSnap]);
+
+  // JS thread states - optimized with useMemo for initial values
   const [isVisible, setIsVisible] = React.useState(false);
   const [showContent, setShowContent] = React.useState(true);
-  const [enableBounces, setEnableBounces] = React.useState(true);
   const [keyboardToggle, setKeyboardToggle] = React.useState(false);
   const [keyboardHeight, setKeyboardHeight] = React.useState(0);
-  const [disableScroll, setDisableScroll] = React.useState(
-    alwaysOpen || snapPoints ? true : undefined,
-  );
-  const [beginScrollYValue, setBeginScrollYValue] = React.useState(0);
-  const [modalPosition, setModalPosition] = React.useState<TPosition>('initial');
-  const [cancelClose, setCancelClose] = React.useState(false);
-  const [layouts, setLayouts] = React.useState<Map<string, number>>(new Map());
-  const [isScrollAtTop, setIsScrollAtTop] = React.useState(true);
 
-  const cancelTranslateY = React.useRef(new Animated.Value(1)).current; // 1 by default to have the translateY animation running
-  const componentTranslateY = React.useRef(new Animated.Value(0)).current;
-  const overlay = React.useRef(new Animated.Value(0)).current;
-  const beginScrollY = React.useRef(new Animated.Value(0)).current;
-  const dragY = React.useRef(new Animated.Value(0)).current;
-  const translateY = React.useRef(new Animated.Value(screenHeight)).current;
-  const reverseBeginScrollY = React.useRef(Animated.multiply(new Animated.Value(-1), beginScrollY))
-    .current;
+  // Memoize initial disableScroll value to prevent unnecessary re-calculations
+  const initialDisableScroll = React.useMemo(() => (alwaysOpen || snapPoints ? true : undefined), [
+    alwaysOpen,
+    snapPoints,
+  ]);
+  const [disableScroll, setDisableScroll] = React.useState(initialDisableScroll);
+
+  const [cancelClose, setCancelClose] = React.useState(false);
+
+  // Use useRef for layouts to avoid unnecessary re-renders
+  const layoutsRef = React.useRef<Map<string, number>>(new Map());
+
+  const cancelTranslateY = useSharedValue(1); // 1 by default to have the translateY animation running
+  const componentTranslateY = useSharedValue(0);
+  const overlay = useSharedValue(0);
+  const beginScrollY = useSharedValue(0);
+  const dragY = useSharedValue(0);
+  
+  // Always create internal translateY
+  const internalTranslateY = useSharedValue(screenHeight);
+  
+  // Use external if provided, otherwise use internal
+  const translateY = externalTranslateY || internalTranslateY;
+  
+  const reverseBeginScrollY = useDerivedValue(() => -beginScrollY.value);
 
   const contentViewRef = React.useRef<ScrollView | FlatList<any> | SectionList<any>>(null);
-  const backButtonListenerRef = React.useRef<NativeEventSubscription>(null);
 
-  // We diff and get the negative value only. It sometimes go above 0
-  // (e.g. 1.5) and creates the flickering on Modalize for a ms
-  const diffClamp = Animated.diffClamp(reverseBeginScrollY, -screenHeight, 0);
-  const componentDragEnabled = (componentTranslateY as any)._value === 1;
-  // When we have a scrolling happening in the ScrollView, we don't want to translate
-  // the modal down. We either multiply by 0 to cancel the animation, or 1 to proceed.
-  const dragValue = Animated.add(
-    Animated.multiply(dragY, componentDragEnabled ? 1 : cancelTranslateY),
-    diffClamp,
-  );
-  const value = Animated.add(
-    Animated.multiply(translateY, componentDragEnabled ? 1 : cancelTranslateY),
-    dragValue,
-  );
+  const componentDragEnabled = useDerivedValue(() => componentTranslateY.value === 1);
+
+  // Optimized calculation with minimal type conversions and cached values
+  const value = useDerivedValue(() => {
+    const multiplier = componentDragEnabled.value ? 1 : cancelTranslateY.value;
+    const clampedDiff = clamp(reverseBeginScrollY.value, -screenHeight, 0);
+    const baseValue = translateY.value + dragY.value;
+    return baseValue * multiplier + clampedDiff;
+  });
 
   let willCloseModalize = false;
 
   const handleAnimateClose = useCallback(
-    (dest: TClose = 'default', callback?: () => void): void => {
-      const { timing, spring } = closeAnimationConfig as any;
-      const lastSnapValue = snapPoints ? snaps[1] : 80;
+    (dest: TClose = 'default'): void => {
+      'worklet';
+
+      if (onWillClose) {
+        runOnJS(onWillClose)();
+      }
+
+      const { timing } = closeAnimationConfig as any;
       const toInitialAlwaysOpen = dest === 'alwaysOpen' && Boolean(alwaysOpen);
       const toValue =
         toInitialAlwaysOpen && alwaysOpen ? (actualModalHeight || 0) - alwaysOpen : screenHeight;
 
-      backButtonListenerRef.current?.remove();
-      cancelTranslateY.setValue(1);
-      setBeginScrollYValue(0);
-      beginScrollY.setValue(0);
+      cancelTranslateY.value = 1;
+      beginScrollYValue.value = 0;
+      beginScrollY.value = 0;
 
-      Animated.parallel([
-        Animated.timing(overlay, {
-          toValue: 0,
-          duration: timing.duration,
-          easing: Easing.ease,
-          useNativeDriver: USE_NATIVE_DRIVER,
-        }),
+      // Calculate current visual position and update translateY to start from there
+      const currentVisualPosition = translateY.value + dragY.value;
+      translateY.value = currentVisualPosition;
+      dragY.value = 0;
 
-        panGestureAnimatedValue
-          ? Animated.timing(panGestureAnimatedValue, {
-              toValue: 0,
-              duration: PAN_DURATION,
-              easing: Easing.ease,
-              useNativeDriver,
-            })
-          : Animated.delay(0),
-
-        spring
-          ? Animated.spring(translateY, {
-              ...getSpringConfig(spring),
-              toValue,
-              useNativeDriver: USE_NATIVE_DRIVER,
-            })
-          : Animated.timing(translateY, {
-              duration: timing.duration,
-              easing: Easing.out(Easing.ease),
-              toValue,
-              useNativeDriver: USE_NATIVE_DRIVER,
-            }),
-      ]).start(() => {
-        if (onClosed) {
-          onClosed();
-        }
-
-        if (callback) {
-          callback();
-        }
-
-        if (alwaysOpen && dest === 'alwaysOpen' && onPositionChange) {
-          onPositionChange('initial');
-        }
-
-        if (alwaysOpen && dest === 'alwaysOpen') {
-          setModalPosition('initial');
-        }
-
-        setShowContent(toInitialAlwaysOpen);
-        translateY.setValue(toValue);
-        dragY.setValue(0);
-        willCloseModalize = false;
-        setLastSnap(lastSnapValue);
-        setIsVisible(toInitialAlwaysOpen);
+      // Animate overlay
+      overlay.value = withTiming(0, {
+        duration: timing.duration,
+        easing: ReanimatedEasing.ease,
       });
+
+      // Animate pan gesture value
+      if (panGestureAnimatedValue) {
+        panGestureAnimatedValue.value = withTiming(0, {
+          duration: PAN_DURATION,
+          easing: ReanimatedEasing.ease,
+        });
+      }
+
+      // Reset dragY on UI thread
+      dragY.value = 0;
+
+      // Animate translateY from current position to destination
+      translateY.value = withTiming(
+        toValue,
+        {
+          duration: timing.duration,
+          easing: ReanimatedEasing.linear,
+        },
+        finished => {
+          'worklet';
+          if (finished) {
+            // Run these only after animation finishes
+            runOnJS(setShowContent)(toInitialAlwaysOpen);
+            lastSnap.value = snapPoints ? snaps[1] : 80;
+            runOnJS(setIsVisible)(toInitialAlwaysOpen);
+
+            if (onClosed) {
+              runOnJS(onClosed)();
+            }
+
+            if (alwaysOpen && dest === 'alwaysOpen' && onPositionChange) {
+              runOnJS(onPositionChange)('initial');
+            }
+
+            if (alwaysOpen && dest === 'alwaysOpen') {
+              modalPosition.value = 'initial';
+            }
+
+            willCloseModalize = false;
+          }
+        },
+      );
     },
     [
       closeAnimationConfig,
@@ -280,21 +307,9 @@ const _ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>): JSX.Elem
       actualModalHeight,
       screenHeight,
       panGestureAnimatedValue,
-      useNativeDriver,
       onClosed,
       onPositionChange,
     ],
-  );
-
-  const handleClose = useCallback(
-    (dest?: TClose, callback?: () => void): void => {
-      if (onWillClose) {
-        onWillClose();
-      }
-
-      handleAnimateClose(dest, callback);
-    },
-    [onWillClose, handleAnimateClose],
   );
 
   const handleBackPress = useCallback((): boolean => {
@@ -305,11 +320,12 @@ const _ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>): JSX.Elem
     if (onBackButtonPress) {
       return onBackButtonPress();
     } else {
-      handleClose();
+      runOnUI(handleAnimateClose)();
     }
 
     return true;
-  }, [alwaysOpen, onBackButtonPress, handleClose]);
+  }, [alwaysOpen, onBackButtonPress, handleAnimateClose]);
+
 
   const handleKeyboardShow = useCallback((event: KeyboardEvent): void => {
     const { height } = event.endCoordinates;
@@ -327,12 +343,10 @@ const _ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>): JSX.Elem
     alwaysOpenValue: number | undefined,
     dest: TOpen = 'default',
   ): void => {
-    const { timing, spring } = openAnimationConfig;
+    'worklet';
 
-    (backButtonListenerRef as any).current = BackHandler.addEventListener(
-      'hardwareBackPress',
-      handleBackPress,
-    );
+    const { timing } = openAnimationConfig;
+
 
     let toValue = 0;
     let toPanValue = 0;
@@ -356,8 +370,8 @@ const _ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>): JSX.Elem
       toPanValue = 1;
     }
 
-    setIsVisible(true);
-    setShowContent(true);
+    runOnJS(setIsVisible)(true);
+    runOnJS(setShowContent)(true);
 
     if ((alwaysOpenValue && dest !== 'top') || (snapPoints && dest === 'default')) {
       newPosition = 'initial';
@@ -365,46 +379,38 @@ const _ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>): JSX.Elem
       newPosition = 'top';
     }
 
-    Animated.parallel([
-      Animated.timing(overlay, {
-        toValue: alwaysOpenValue && dest === 'default' ? 0 : 1,
-        duration: timing.duration,
-        easing: Easing.ease,
-        useNativeDriver: USE_NATIVE_DRIVER,
-      }),
-
-      panGestureAnimatedValue
-        ? Animated.timing(panGestureAnimatedValue, {
-            toValue: toPanValue,
-            duration: PAN_DURATION,
-            easing: Easing.ease,
-            useNativeDriver,
-          })
-        : Animated.delay(0),
-
-      spring
-        ? Animated.spring(translateY, {
-            ...getSpringConfig(spring),
-            toValue,
-            useNativeDriver: USE_NATIVE_DRIVER,
-          })
-        : Animated.timing(translateY, {
-            toValue,
-            duration: timing.duration,
-            easing: timing.easing,
-            useNativeDriver: USE_NATIVE_DRIVER,
-          }),
-    ]).start(() => {
-      if (onOpened) {
-        onOpened();
-      }
-
-      setModalPosition(newPosition);
-
-      if (onPositionChange) {
-        onPositionChange(newPosition);
-      }
+    // Animate overlay
+    overlay.value = withTiming(alwaysOpenValue && dest === 'default' ? 0 : 1, {
+      duration: timing.duration,
+      easing: ReanimatedEasing.ease,
     });
+
+    // Animate pan gesture value
+    if (panGestureAnimatedValue) {
+      panGestureAnimatedValue.value = withTiming(toPanValue, {
+        duration: PAN_DURATION,
+        easing: ReanimatedEasing.ease,
+      });
+    }
+
+    // Animate translateY
+    const translateYAnimation = withTiming(toValue, {
+      duration: timing.duration,
+      easing: ReanimatedEasing.out(ReanimatedEasing.ease),
+    });
+
+    translateY.value = translateYAnimation;
+
+    // Use runOnJS to handle the completion callback
+    if (onOpened) {
+      runOnJS(onOpened)();
+    }
+
+    modalPosition.value = newPosition;
+
+    if (onPositionChange) {
+      runOnJS(onPositionChange)(newPosition);
+    }
   };
 
   const handleModalizeContentLayout = useCallback(
@@ -427,16 +433,19 @@ const _ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>): JSX.Elem
 
   const handleBaseLayout = useCallback(
     (component: 'content' | 'header' | 'footer' | 'floating', height: number): void => {
-      setLayouts(new Map(layouts.set(component, height)));
+      // Update ref directly to avoid state updates
+      layoutsRef.current.set(component, height);
 
-      const max = Array.from(layouts).reduce((acc, cur) => acc + cur?.[1], 0);
+      // Layouts are now managed via ref only to avoid unnecessary re-renders
+
+      const max = Array.from(layoutsRef.current).reduce((acc, cur) => acc + cur?.[1], 0);
       const maxFixed = +max.toFixed(3);
       const maxModalHeightFixed = +maxModalHeight.toFixed(3);
       const shorterHeight = maxFixed < maxModalHeightFixed;
 
       setDisableScroll(shorterHeight && disableScrollIfPossible);
     },
-    [layouts, maxModalHeight, disableScrollIfPossible],
+    [maxModalHeight, disableScrollIfPossible],
   );
 
   const handleContentLayout = useCallback(
@@ -465,8 +474,9 @@ const _ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>): JSX.Elem
     (event: any) => {
       const { contentOffset } = event.nativeEvent;
       const isAtTop = contentOffset.y <= 0;
-      if (isAtTop !== isScrollAtTop) {
-        setIsScrollAtTop(isAtTop);
+      // Only update if the value actually changed to prevent unnecessary worklet calls
+      if (isAtTop !== isScrollAtTop.value) {
+        isScrollAtTop.value = isAtTop;
       }
     },
     [isScrollAtTop],
@@ -495,91 +505,103 @@ const _ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>): JSX.Elem
         .enabled(panGestureEnabled)
         .shouldCancelWhenOutside(false)
         .onBegin(() => {
-          console.log('🔴 panGestureModalize onBegin');
+          'worklet';
 
           // Handle pan begin for main modalize
-          setCancelClose(false);
+          runOnJS(setCancelClose)(false);
 
           // Reset animation values at the start of each gesture
-          dragY.setValue(0);
+          dragY.value = 0;
           // Don't reset translateY - it should maintain current position (snap point)
-          cancelTranslateY.setValue(1);
-
-          console.log('beginScrollYValue', beginScrollYValue);
-
-          cancelTranslateY.setValue(1);
+          cancelTranslateY.value = 1;
 
           if (!tapGestureEnabled) {
-            setDisableScroll(
-              (Boolean(snapPoints) || Boolean(alwaysOpen)) && modalPosition === 'initial',
+            runOnJS(setDisableScroll)(
+              (Boolean(snapPoints) || Boolean(alwaysOpen)) && modalPosition.value === 'initial',
             );
           }
         })
         .onChange((event: PanGestureEvent) => {
+          'worklet';
           const { translationY } = event;
 
           // Update dragY for animation
-          dragY.setValue(translationY);
+          dragY.value = translationY;
 
+          // Optimize panGestureAnimatedValue calculation with early returns
           if (panGestureAnimatedValue) {
+            const currentPosition = modalPosition.value;
+
+            // Early return for edge cases to avoid unnecessary calculations
+            if (currentPosition === 'initial' && translationY > 0) {
+              panGestureAnimatedValue.value = 0;
+              return;
+            }
+
+            if (currentPosition === 'top' && translationY <= 0) {
+              panGestureAnimatedValue.value = 1;
+              return;
+            }
+
+            // Cache offset calculation
             const offset = alwaysOpen ?? snapPoints?.[0] ?? 0;
-            const diff = Math.abs(translationY / (maxModalHeight - offset));
-            const y = translationY <= 0 ? diff : 1 - diff;
-            let value: number; // between 0 and 1
+            const maxHeight = maxModalHeight - offset;
 
-            // Prevent the modal from going below its initial position
-            if (modalPosition === 'initial' && translationY > 0) {
-              value = 0;
+            // Avoid division if possible
+            if (maxHeight <= 0) {
+              panGestureAnimatedValue.value = 0;
+              return;
             }
 
-            // Prevent the modal from going above the top position
-            else if (modalPosition === 'top' && translationY <= 0) {
-              value = 1;
-            } else {
-              value = y;
-            }
+            // Optimized calculation with single division and cached values
+            const normalizedTranslation = translationY / maxHeight;
+            const isUpward = translationY <= 0;
+            const absNormalized = Math.abs(normalizedTranslation);
 
-            panGestureAnimatedValue.setValue(value);
+            panGestureAnimatedValue.value = Math.max(
+              0,
+              Math.min(1, isUpward ? absNormalized : 1 - absNormalized),
+            );
           }
         })
         .onEnd((event: PanGestureStateEvent) => {
-          console.log('🔴 panGestureModalize onEnd');
+          'worklet';
 
           const { timing } = closeAnimationConfig;
           const { velocityY, translationY } = event;
           // Removed negativeReverseScroll as it's no longer needed with the new snap logic
-          const thresholdProps = translationY > threshold && beginScrollYValue === 0;
+          const thresholdProps = translationY > threshold && beginScrollYValue.value === 0;
           const closeThreshold = velocity
-            ? (beginScrollYValue <= 20 && velocityY >= velocity) || thresholdProps
+            ? (beginScrollYValue.value <= 20 && velocityY >= velocity) || thresholdProps
             : thresholdProps;
 
-          const enableBounces = alwaysOpen
-            ? beginScrollYValue > 0 || translationY < 0
-            : !isScrollAtTop;
+          const enableBouncesValue = alwaysOpen
+            ? beginScrollYValue.value > 0 || translationY < 0
+            : !isScrollAtTop.value;
 
-          setEnableBounces(enableBounces);
+          enableBounces.value = enableBouncesValue;
 
-          const toValue = translationY - beginScrollYValue;
-          let destSnapPoint = lastSnap; // Start with current position
+          const toValue = translationY - beginScrollYValue.value;
+          let destSnapPoint = lastSnap.value; // Start with current position
 
           if (snapPoints || alwaysOpen) {
-            const endOffsetY = lastSnap + toValue + dragToss * velocityY;
+            const endOffsetY = lastSnap.value + toValue + dragToss * velocityY;
 
-            // Find the nearest snap point
-            let nearestSnap = snaps[0]; // Start with first snap point
+            // Find the nearest snap point with optimized search
+            let nearestSnap = snaps[0];
             let minDistance = Math.abs(snaps[0] - endOffsetY);
 
-            snaps.forEach((snap: number) => {
+            // Use for loop instead of forEach for better performance
+            for (let i = 1; i < snaps.length; i++) {
+              const snap = snaps[i];
               const distFromSnap = Math.abs(snap - endOffsetY);
 
-              // Find the closest snap point
               if (distFromSnap < minDistance) {
                 minDistance = distFromSnap;
                 nearestSnap = snap;
               }
-            });
+            }
 
-            // Set destination to closest snap point
             destSnapPoint = nearestSnap;
 
             // Handle special cases
@@ -587,7 +609,7 @@ const _ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>): JSX.Elem
               if (nearestSnap === maxModalHeight) {
                 // Snap to closed position - close the modal
                 willCloseModalize = true;
-                handleClose();
+                handleAnimateClose('default');
               } else {
                 // Snap to snap point or full open - don't close
                 willCloseModalize = false;
@@ -595,75 +617,69 @@ const _ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>): JSX.Elem
             }
 
             // For alwaysOpen props
-            if (alwaysOpen && beginScrollYValue <= 0) {
+            if (alwaysOpen && beginScrollYValue.value <= 0) {
               destSnapPoint = (actualModalHeight || 0) - alwaysOpen;
               willCloseModalize = false;
             }
           } else if (closeThreshold && !alwaysOpen && !cancelClose) {
             willCloseModalize = true;
-            handleClose();
+            handleAnimateClose('default');
           }
 
           if (willCloseModalize) {
             return;
           }
 
-          setLastSnap(destSnapPoint);
-          translateY.extractOffset();
-          translateY.setValue(toValue);
-          translateY.flattenOffset();
-          dragY.setValue(0);
+          // Calculate the current visual position (where the modal actually is visually)
+          const currentVisualPosition = translateY.value + dragY.value;
+
+          // Update translateY to the current visual position and reset drag offset
+          translateY.value = currentVisualPosition;
+          dragY.value = 0;
+
+          // Update lastSnap to the destination snap point for next gesture
+          lastSnap.value = destSnapPoint;
 
           if (alwaysOpen) {
-            Animated.timing(overlay, {
-              toValue: Number(destSnapPoint <= 0),
+            overlay.value = withTiming(destSnapPoint <= 0 ? 1 : 0, {
               duration: timing.duration,
-              easing: Easing.ease,
-              useNativeDriver: USE_NATIVE_DRIVER,
-            }).start();
+              easing: ReanimatedEasing.ease,
+            });
           }
 
-          Animated.spring(translateY, {
-            tension: 50,
-            friction: 12,
-            velocity: velocityY,
-            toValue: destSnapPoint,
-            useNativeDriver: USE_NATIVE_DRIVER,
-          }).start();
+          // Animate to destination snap point
+          translateY.value = withTiming(destSnapPoint, {
+            duration: 300,
+            easing: ReanimatedEasing.out(ReanimatedEasing.ease),
+          });
 
-          if (beginScrollYValue <= 0) {
+          if (beginScrollYValue.value <= 0) {
             const modalPositionValue = destSnapPoint <= 0 ? 'top' : 'initial';
 
             if (panGestureAnimatedValue) {
-              Animated.timing(panGestureAnimatedValue, {
-                toValue: Number(modalPositionValue === 'top'),
+              panGestureAnimatedValue.value = withTiming(modalPositionValue === 'top' ? 1 : 0, {
                 duration: PAN_DURATION,
-                easing: Easing.ease,
-                useNativeDriver,
-              }).start();
+                easing: ReanimatedEasing.ease,
+              });
             }
 
             if (!adjustToContentHeight && modalPositionValue === 'top') {
-              setDisableScroll(false);
+              runOnJS(setDisableScroll)(false);
             }
 
-            if (onPositionChange && modalPosition !== modalPositionValue) {
-              onPositionChange(modalPositionValue);
+            if (onPositionChange && modalPosition.value !== modalPositionValue) {
+              runOnJS(onPositionChange)(modalPositionValue);
             }
 
-            if (modalPosition !== modalPositionValue) {
-              setModalPosition(modalPositionValue);
+            if (modalPosition.value !== modalPositionValue) {
+              modalPosition.value = modalPositionValue;
             }
           }
-        })
-        .runOnJS(true),
+        }),
     [
       panGestureEnabled,
-      modalPosition,
-      beginScrollYValue,
       snapPoints,
       closeSnapPointStraightEnabled,
-      isScrollAtTop,
       alwaysOpen,
       tapGestureEnabled,
       closeAnimationConfig,
@@ -671,24 +687,19 @@ const _ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>): JSX.Elem
       velocity,
       dragToss,
       maxModalHeight,
-      lastSnap,
       panGestureAnimatedValue,
       useNativeDriver,
       onPositionChange,
       adjustToContentHeight,
-      handleClose,
+      handleAnimateClose,
       actualModalHeight,
       snaps,
       overlay,
       translateY,
       dragY,
-      setEnableBounces,
-      setLastSnap,
-      setBeginScrollYValue,
       beginScrollY,
       setCancelClose,
       setDisableScroll,
-      setModalPosition,
     ],
   );
 
@@ -697,22 +708,23 @@ const _ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>): JSX.Elem
       Gesture.Tap()
         .enabled(closeOnOverlayTap !== undefined ? closeOnOverlayTap : panGestureEnabled)
         .onStart(() => {
+          'worklet';
+
           if (onOverlayPress) {
-            onOverlayPress();
+            runOnJS(onOverlayPress)();
           }
           const dest = !!alwaysOpen ? 'alwaysOpen' : 'default';
           if (!willCloseModalize) {
-            handleClose(dest);
+            handleAnimateClose(dest);
           }
-        })
-        .runOnJS(true),
+        }),
     [
       closeOnOverlayTap,
       panGestureEnabled,
       onOverlayPress,
       alwaysOpen,
       willCloseModalize,
-      handleClose,
+      handleAnimateClose,
     ],
   );
 
@@ -729,8 +741,8 @@ const _ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>): JSX.Elem
       handleAnimateOpen(alwaysOpen, dest);
     },
 
-    close(dest?: TClose, callback?: () => void): void {
-      handleClose(dest, callback);
+    close(dest?: TClose): void {
+      runOnUI(handleAnimateClose)(dest);
     },
   }));
 
@@ -739,6 +751,22 @@ const _ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>): JSX.Elem
       handleAnimateOpen(alwaysOpen);
     }
   }, [alwaysOpen, actualModalHeight]);
+
+  // Manage back button listener based on visibility
+  React.useEffect(() => {
+    let backButtonListener: NativeEventSubscription | null = null;
+
+    if (isVisible) {
+      backButtonListener = BackHandler.addEventListener(
+        'hardwareBackPress',
+        handleBackPress,
+      );
+    }
+
+    return () => {
+      backButtonListener?.remove();
+    };
+  }, [isVisible, handleBackPress]);
 
   React.useEffect(() => {
     invariant(
@@ -757,9 +785,8 @@ const _ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>): JSX.Elem
     let keyboardShowListener: EmitterSubscription | null = null;
     let keyboardHideListener: EmitterSubscription | null = null;
 
-    const beginScrollYListener = beginScrollY.addListener(({ value }) =>
-      setBeginScrollYValue(value),
-    );
+    // Note: In Reanimated v3, we don't need to manually add listeners for shared values
+    // The beginScrollY value will be automatically tracked when used in derived values
 
     if (isBelowRN65) {
       Keyboard.addListener('keyboardDidShow', handleKeyboardShow);
@@ -770,9 +797,6 @@ const _ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>): JSX.Elem
     }
 
     return (): void => {
-      backButtonListenerRef.current?.remove();
-      beginScrollY.removeListener(beginScrollYListener);
-
       if (isBelowRN65) {
         Keyboard.removeListener('keyboardDidShow', handleKeyboardShow);
         Keyboard.removeListener('keyboardDidHide', handleKeyboardHide);
@@ -783,32 +807,52 @@ const _ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>): JSX.Elem
     };
   }, []);
 
-  const keyboardAvoidingViewProps: Animated.AnimatedProps<KeyboardAvoidingViewProps> = {
-    keyboardVerticalOffset: keyboardAvoidingOffset,
-    behavior: keyboardAvoidingBehavior,
-    enabled: avoidKeyboardLikeIOS,
-    style: [
-      s.modalize__content,
-      modalStyle,
-      {
-        height: actualModalHeight,
-        maxHeight: maxModalHeight,
-        transform: [
-          {
-            translateY: value.interpolate({
-              inputRange: [-40, 0, maxModalHeight],
-              outputRange: [0, 0, maxModalHeight],
-              extrapolate: 'clamp',
-            }),
-          },
-        ],
-      },
-    ],
-  };
+  const animatedStyle = useAnimatedStyle(() => {
+    const translateYValue = value.value;
 
-  if (!avoidKeyboardLikeIOS && !adjustToContentHeight) {
-    keyboardAvoidingViewProps.onLayout = handleModalizeContentLayout;
-  }
+    // Optimized calculation with early return and cached bounds
+    if (translateYValue <= 0) {
+      return { transform: [{ translateY: 0 }] };
+    }
+
+    // Cache the bounds to avoid repeated calculations
+    const clampedValue = Math.max(-40, Math.min(maxModalHeight, translateYValue));
+    return { transform: [{ translateY: clampedValue }] };
+  });
+
+  // Memoize keyboard avoiding view props to prevent unnecessary re-creation
+  const keyboardAvoidingViewProps = React.useMemo((): Animated.AnimateProps<KeyboardAvoidingViewProps> => {
+    const props: Animated.AnimateProps<KeyboardAvoidingViewProps> = {
+      keyboardVerticalOffset: keyboardAvoidingOffset,
+      behavior: keyboardAvoidingBehavior,
+      enabled: avoidKeyboardLikeIOS,
+      style: [
+        s.modalize__content,
+        modalStyle,
+        {
+          height: actualModalHeight,
+          maxHeight: maxModalHeight,
+        },
+        animatedStyle,
+      ],
+    };
+
+    if (!avoidKeyboardLikeIOS && !adjustToContentHeight) {
+      props.onLayout = handleModalizeContentLayout;
+    }
+
+    return props;
+  }, [
+    keyboardAvoidingOffset,
+    keyboardAvoidingBehavior,
+    avoidKeyboardLikeIOS,
+    modalStyle,
+    actualModalHeight,
+    maxModalHeight,
+    animatedStyle,
+    adjustToContentHeight,
+    handleModalizeContentLayout,
+  ]);
 
   const renderModalize = (
     <View
@@ -839,7 +883,7 @@ const _ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>): JSX.Elem
                 contentViewRef={contentViewRef}
                 handleContentLayout={handleContentLayout}
                 handleScroll={handleScroll}
-                enableBounces={enableBounces}
+                enableBounces={enableBounces.value}
                 keyboardToggle={keyboardToggle}
                 disableScroll={disableScroll}
               >
@@ -914,3 +958,4 @@ export type { HandleProps } from './components/Handle';
 export type { HeaderAndFooterProps } from './components/HeaderAndFooter';
 export type { ModalizeContentProps } from './components/ModalizeContent';
 export type { OverlayProps } from './components/Overlay';
+

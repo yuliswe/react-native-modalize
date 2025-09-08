@@ -224,9 +224,16 @@ export interface IProps<ListItem = any> {
   velocity?: number | undefined;
 
   /**
-   * Animated.Value of the modal position between 0 and 1.
+   * SharedValue of the modal position between 0 and 1.
    */
-  panGestureAnimatedValue?: Animated.Value;
+  panGestureAnimatedValue?: { value: number };
+
+  /**
+   * External SharedValue to control the modal's translateY position in pixels.
+   * If provided, this will be used directly instead of the internal translateY.
+   * Range: 0 (top) to screenHeight (closed)
+   */
+  translateY?: { value: number };
 
   /**
    * Define if the Animated.Value uses the native thread to execute the animations.
