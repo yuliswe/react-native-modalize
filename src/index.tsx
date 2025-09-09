@@ -111,6 +111,7 @@ const _ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>): JSX.Elem
     velocity = 2800,
     panGestureAnimatedValue,
     translateY: externalTranslateY,
+    panGesture: externalPanGesture,
     useNativeDriver = true,
 
     // Elements visibilities
@@ -499,209 +500,211 @@ const _ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>): JSX.Elem
   );
 
   // V2 Gesture definitions with proper composition
-  const panGestureModalize = React.useMemo(
-    () =>
-      Gesture.Pan()
-        .enabled(panGestureEnabled)
-        .shouldCancelWhenOutside(false)
-        .onBegin(() => {
-          'worklet';
+  const panGestureModalize = React.useMemo(() => {
+    // Start with external pan gesture if provided, otherwise create new one
+    const baseGesture = externalPanGesture || Gesture.Pan();
+    
+    return baseGesture
+      .enabled(panGestureEnabled)
+      .shouldCancelWhenOutside(false)
+      .onBegin(() => {
+        'worklet';
 
-          // Handle pan begin for main modalize
-          runOnJS(setCancelClose)(false);
+        // Handle pan begin for main modalize
+        runOnJS(setCancelClose)(false);
 
-          // Reset animation values at the start of each gesture
-          dragY.value = 0;
-          // Don't reset translateY - it should maintain current position (snap point)
-          cancelTranslateY.value = 1;
+        // Reset animation values at the start of each gesture
+        dragY.value = 0;
+        // Don't reset translateY - it should maintain current position (snap point)
+        cancelTranslateY.value = 1;
 
-          if (!tapGestureEnabled) {
-            runOnJS(setDisableScroll)(
-              (Boolean(snapPoints) || Boolean(alwaysOpen)) && modalPosition.value === 'initial',
-            );
-          }
-        })
-        .onChange((event: PanGestureEvent) => {
-          'worklet';
-          const { translationY } = event;
+        if (!tapGestureEnabled) {
+          runOnJS(setDisableScroll)(
+            (Boolean(snapPoints) || Boolean(alwaysOpen)) && modalPosition.value === 'initial',
+          );
+        }
+      })
+      .onChange((event: PanGestureEvent) => {
+        'worklet';
+        const { translationY } = event;
 
-          // Update dragY for animation
-          dragY.value = translationY;
+        // Update dragY for animation
+        dragY.value = translationY;
 
-          // Optimize panGestureAnimatedValue calculation with early returns
-          if (panGestureAnimatedValue) {
-            const currentPosition = modalPosition.value;
+        // Optimize panGestureAnimatedValue calculation with early returns
+        if (panGestureAnimatedValue) {
+          const currentPosition = modalPosition.value;
 
-            // Early return for edge cases to avoid unnecessary calculations
-            if (currentPosition === 'initial' && translationY > 0) {
-              panGestureAnimatedValue.value = 0;
-              return;
-            }
-
-            if (currentPosition === 'top' && translationY <= 0) {
-              panGestureAnimatedValue.value = 1;
-              return;
-            }
-
-            // Cache offset calculation
-            const offset = alwaysOpen ?? snapPoints?.[0] ?? 0;
-            const maxHeight = maxModalHeight - offset;
-
-            // Avoid division if possible
-            if (maxHeight <= 0) {
-              panGestureAnimatedValue.value = 0;
-              return;
-            }
-
-            // Optimized calculation with single division and cached values
-            const normalizedTranslation = translationY / maxHeight;
-            const isUpward = translationY <= 0;
-            const absNormalized = Math.abs(normalizedTranslation);
-
-            panGestureAnimatedValue.value = Math.max(
-              0,
-              Math.min(1, isUpward ? absNormalized : 1 - absNormalized),
-            );
-          }
-        })
-        .onEnd((event: PanGestureStateEvent) => {
-          'worklet';
-
-          const { timing } = closeAnimationConfig;
-          const { velocityY, translationY } = event;
-          // Removed negativeReverseScroll as it's no longer needed with the new snap logic
-          const thresholdProps = translationY > threshold && beginScrollYValue.value === 0;
-          const closeThreshold = velocity
-            ? (beginScrollYValue.value <= 20 && velocityY >= velocity) || thresholdProps
-            : thresholdProps;
-
-          const enableBouncesValue = alwaysOpen
-            ? beginScrollYValue.value > 0 || translationY < 0
-            : !isScrollAtTop.value;
-
-          enableBounces.value = enableBouncesValue;
-
-          const toValue = translationY - beginScrollYValue.value;
-          let destSnapPoint = lastSnap.value; // Start with current position
-
-          if (snapPoints || alwaysOpen) {
-            const endOffsetY = lastSnap.value + toValue + dragToss * velocityY;
-
-            // Find the nearest snap point with optimized search
-            let nearestSnap = snaps[0];
-            let minDistance = Math.abs(snaps[0] - endOffsetY);
-
-            // Use for loop instead of forEach for better performance
-            for (let i = 1; i < snaps.length; i++) {
-              const snap = snaps[i];
-              const distFromSnap = Math.abs(snap - endOffsetY);
-
-              if (distFromSnap < minDistance) {
-                minDistance = distFromSnap;
-                nearestSnap = snap;
-              }
-            }
-
-            destSnapPoint = nearestSnap;
-
-            // Handle special cases
-            if (!alwaysOpen) {
-              if (nearestSnap === maxModalHeight) {
-                // Snap to closed position - close the modal
-                willCloseModalize = true;
-                handleAnimateClose('default');
-              } else {
-                // Snap to snap point or full open - don't close
-                willCloseModalize = false;
-              }
-            }
-
-            // For alwaysOpen props
-            if (alwaysOpen && beginScrollYValue.value <= 0) {
-              destSnapPoint = (actualModalHeight || 0) - alwaysOpen;
-              willCloseModalize = false;
-            }
-          } else if (closeThreshold && !alwaysOpen && !cancelClose) {
-            willCloseModalize = true;
-            handleAnimateClose('default');
-          }
-
-          if (willCloseModalize) {
+          // Early return for edge cases to avoid unnecessary calculations
+          if (currentPosition === 'initial' && translationY > 0) {
+            panGestureAnimatedValue.value = 0;
             return;
           }
 
-          // Calculate the current visual position (where the modal actually is visually)
-          const currentVisualPosition = translateY.value + dragY.value;
+          if (currentPosition === 'top' && translationY <= 0) {
+            panGestureAnimatedValue.value = 1;
+            return;
+          }
 
-          // Update translateY to the current visual position and reset drag offset
-          translateY.value = currentVisualPosition;
-          dragY.value = 0;
+          // Cache offset calculation
+          const offset = alwaysOpen ?? snapPoints?.[0] ?? 0;
+          const maxHeight = maxModalHeight - offset;
 
-          // Update lastSnap to the destination snap point for next gesture
-          lastSnap.value = destSnapPoint;
+          // Avoid division if possible
+          if (maxHeight <= 0) {
+            panGestureAnimatedValue.value = 0;
+            return;
+          }
 
-          if (alwaysOpen) {
-            overlay.value = withTiming(destSnapPoint <= 0 ? 1 : 0, {
-              duration: timing.duration,
+          // Optimized calculation with single division and cached values
+          const normalizedTranslation = translationY / maxHeight;
+          const isUpward = translationY <= 0;
+          const absNormalized = Math.abs(normalizedTranslation);
+
+          panGestureAnimatedValue.value = Math.max(
+            0,
+            Math.min(1, isUpward ? absNormalized : 1 - absNormalized),
+          );
+        }
+      })
+      .onEnd((event: PanGestureStateEvent) => {
+        'worklet';
+
+        const { timing } = closeAnimationConfig;
+        const { velocityY, translationY } = event;
+        // Removed negativeReverseScroll as it's no longer needed with the new snap logic
+        const thresholdProps = translationY > threshold && beginScrollYValue.value === 0;
+        const closeThreshold = velocity
+          ? (beginScrollYValue.value <= 20 && velocityY >= velocity) || thresholdProps
+          : thresholdProps;
+
+        const enableBouncesValue = alwaysOpen
+          ? beginScrollYValue.value > 0 || translationY < 0
+          : !isScrollAtTop.value;
+
+        enableBounces.value = enableBouncesValue;
+
+        const toValue = translationY - beginScrollYValue.value;
+        let destSnapPoint = lastSnap.value; // Start with current position
+
+        if (snapPoints || alwaysOpen) {
+          const endOffsetY = lastSnap.value + toValue + dragToss * velocityY;
+
+          // Find the nearest snap point with optimized search
+          let nearestSnap = snaps[0];
+          let minDistance = Math.abs(snaps[0] - endOffsetY);
+
+          // Use for loop instead of forEach for better performance
+          for (let i = 1; i < snaps.length; i++) {
+            const snap = snaps[i];
+            const distFromSnap = Math.abs(snap - endOffsetY);
+
+            if (distFromSnap < minDistance) {
+              minDistance = distFromSnap;
+              nearestSnap = snap;
+            }
+          }
+
+          destSnapPoint = nearestSnap;
+
+          // Handle special cases
+          if (!alwaysOpen) {
+            if (nearestSnap === maxModalHeight) {
+              // Snap to closed position - close the modal
+              willCloseModalize = true;
+              handleAnimateClose('default');
+            } else {
+              // Snap to snap point or full open - don't close
+              willCloseModalize = false;
+            }
+          }
+
+          // For alwaysOpen props
+          if (alwaysOpen && beginScrollYValue.value <= 0) {
+            destSnapPoint = (actualModalHeight || 0) - alwaysOpen;
+            willCloseModalize = false;
+          }
+        } else if (closeThreshold && !alwaysOpen && !cancelClose) {
+          willCloseModalize = true;
+          handleAnimateClose('default');
+        }
+
+        if (willCloseModalize) {
+          return;
+        }
+
+        // Calculate the current visual position (where the modal actually is visually)
+        const currentVisualPosition = translateY.value + dragY.value;
+
+        // Update translateY to the current visual position and reset drag offset
+        translateY.value = currentVisualPosition;
+        dragY.value = 0;
+
+        // Update lastSnap to the destination snap point for next gesture
+        lastSnap.value = destSnapPoint;
+
+        if (alwaysOpen) {
+          overlay.value = withTiming(destSnapPoint <= 0 ? 1 : 0, {
+            duration: timing.duration,
+            easing: ReanimatedEasing.ease,
+          });
+        }
+
+        // Animate to destination snap point
+        translateY.value = withTiming(destSnapPoint, {
+          duration: 300,
+          easing: ReanimatedEasing.out(ReanimatedEasing.ease),
+        });
+
+        if (beginScrollYValue.value <= 0) {
+          const modalPositionValue = destSnapPoint <= 0 ? 'top' : 'initial';
+
+          if (panGestureAnimatedValue) {
+            panGestureAnimatedValue.value = withTiming(modalPositionValue === 'top' ? 1 : 0, {
+              duration: PAN_DURATION,
               easing: ReanimatedEasing.ease,
             });
           }
 
-          // Animate to destination snap point
-          translateY.value = withTiming(destSnapPoint, {
-            duration: 300,
-            easing: ReanimatedEasing.out(ReanimatedEasing.ease),
-          });
-
-          if (beginScrollYValue.value <= 0) {
-            const modalPositionValue = destSnapPoint <= 0 ? 'top' : 'initial';
-
-            if (panGestureAnimatedValue) {
-              panGestureAnimatedValue.value = withTiming(modalPositionValue === 'top' ? 1 : 0, {
-                duration: PAN_DURATION,
-                easing: ReanimatedEasing.ease,
-              });
-            }
-
-            if (!adjustToContentHeight && modalPositionValue === 'top') {
-              runOnJS(setDisableScroll)(false);
-            }
-
-            if (onPositionChange && modalPosition.value !== modalPositionValue) {
-              runOnJS(onPositionChange)(modalPositionValue);
-            }
-
-            if (modalPosition.value !== modalPositionValue) {
-              modalPosition.value = modalPositionValue;
-            }
+          if (!adjustToContentHeight && modalPositionValue === 'top') {
+            runOnJS(setDisableScroll)(false);
           }
-        }),
-    [
-      panGestureEnabled,
-      snapPoints,
-      closeSnapPointStraightEnabled,
-      alwaysOpen,
-      tapGestureEnabled,
-      closeAnimationConfig,
-      threshold,
-      velocity,
-      dragToss,
-      maxModalHeight,
-      panGestureAnimatedValue,
-      useNativeDriver,
-      onPositionChange,
-      adjustToContentHeight,
-      handleAnimateClose,
-      actualModalHeight,
-      snaps,
-      overlay,
-      translateY,
-      dragY,
-      beginScrollY,
-      setCancelClose,
-      setDisableScroll,
-    ],
-  );
+
+          if (onPositionChange && modalPosition.value !== modalPositionValue) {
+            runOnJS(onPositionChange)(modalPositionValue);
+          }
+
+          if (modalPosition.value !== modalPositionValue) {
+            modalPosition.value = modalPositionValue;
+          }
+        }
+      });
+  }, [
+    externalPanGesture,
+    panGestureEnabled,
+    snapPoints,
+    closeSnapPointStraightEnabled,
+    alwaysOpen,
+    tapGestureEnabled,
+    closeAnimationConfig,
+    threshold,
+    velocity,
+    dragToss,
+    maxModalHeight,
+    panGestureAnimatedValue,
+    useNativeDriver,
+    onPositionChange,
+    adjustToContentHeight,
+    handleAnimateClose,
+    actualModalHeight,
+    snaps,
+    overlay,
+    translateY,
+    dragY,
+    beginScrollY,
+    setCancelClose,
+    setDisableScroll,
+  ]);
 
   const tapGestureOverlay = React.useMemo(
     () =>

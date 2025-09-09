@@ -236,6 +236,13 @@ export interface IProps<ListItem = any> {
   translateY?: { value: number };
 
   /**
+   * External Gesture.Pan() instance to add custom event handlers to the modal's pan gesture.
+   * If provided, this will be composed with the internal pan gesture, preserving all default behavior
+   * while allowing the parent to add additional custom handlers.
+   */
+  panGesture?: any; // Gesture.Pan() type from react-native-gesture-handler
+
+  /**
    * Define if the Animated.Value uses the native thread to execute the animations.
    * @default true
    */
