@@ -1,6 +1,6 @@
 {
   "name": "@yuliswe/react-native-modalize",
-  "version": "3.0.0",
+  "version": "3.0.5",
   "description": "A highly customizable modal/bottom sheet that loves scrolling content.",
   "main": "lib/index.js",
   "types": "./lib/index.d.ts",
@@ -22,7 +22,7 @@
     "watch:react-native-navigation": "concurrently \"npx yarn watch:modalize\" \"npx yarn cpx 'src/**/*' 'examples/react-native-navigation/node_modules/react-native-modalize' --watch\"",
     "watch:react-navigation": "concurrently \"npx yarn watch:modalize\" \"npx yarn cpx 'src/**/*' 'examples/react-navigation/node_modules/react-native-modalize' --watch\"",
     "release": "npm run build && npm publish",
-    "release:github": "ts-node scripts/release-to-github.ts"
+    "release:github": "scripts/release-to-github.ts"
   },
   "keywords": [
     "react-native",

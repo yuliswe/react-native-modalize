@@ -1603,6 +1603,11 @@
   dependencies:
     eslint-visitor-keys "^1.1.0"
 
+"@yuliswe/react-native-modalize@file:yuliswe-react-native-modalize-3.0.2.tgz":
+  version "3.0.2"
+  resolved "file:yuliswe-react-native-modalize-3.0.2.tgz"
+  integrity sha512-DWEIrd4OQBFRT6khYd7OKPJ1Vjio1cJpsGeSWZj7l7kN4MV+78yf/rozIMYqIJXx1FfwRChzFJ58xVMjKMImXw==
+
 abort-controller@^3.0.0:
   version "3.0.0"
   resolved "https://registry.npmjs.org/abort-controller/-/abort-controller-3.0.0.tgz"
@@ -5583,7 +5588,7 @@ react-native-codegen@^0.0.7:
     jscodeshift "^0.11.0"
     nullthrows "^1.1.1"
 
-react-native-gesture-handler@^2.8.0:
+react-native-gesture-handler@^2.8.0, "react-native-gesture-handler@>= 2.0.0":
   version "2.28.0"
   resolved "https://registry.npmjs.org/react-native-gesture-handler/-/react-native-gesture-handler-2.28.0.tgz"
   integrity sha512-0msfJ1vRxXKVgTgvL+1ZOoYw3/0z1R+Ked0+udoJhyplC2jbVKIJ8Z1bzWdpQRCV3QcQ87Op0zJVE5DhKK2A0A==
@@ -5597,7 +5602,7 @@ react-native-is-edge-to-edge@1.1.7:
   resolved "https://registry.npmjs.org/react-native-is-edge-to-edge/-/react-native-is-edge-to-edge-1.1.7.tgz"
   integrity sha512-EH6i7E8epJGIcu7KpfXYXiV2JFIYITtq+rVS8uEb+92naMRBdxhTuS8Wn2Q7j9sqyO0B+Xbaaf9VdipIAmGW4w==
 
-react-native-reanimated@^3.19.1:
+react-native-reanimated@^3.19.1, "react-native-reanimated@>= 3.0.0":
   version "3.19.1"
   resolved "https://registry.npmjs.org/react-native-reanimated/-/react-native-reanimated-3.19.1.tgz"
   integrity sha512-ILL0FSNzSVIg6WuawrsMBvNxk2yJFiTUcahimXDAeNiE/09eagVUlHhYWXAAmH0umvAOafBaGjO7YfBhUrf5ZQ==
@@ -5615,7 +5620,7 @@ react-native-reanimated@^3.19.1:
     invariant "^2.2.4"
     react-native-is-edge-to-edge "1.1.7"
 
-react-native@*, react-native@0.66.0:
+react-native@*, "react-native@> 0.50.0", react-native@0.66.0:
   version "0.66.0"
   resolved "https://registry.npmjs.org/react-native/-/react-native-0.66.0.tgz"
   integrity sha512-m26TKwzsfHVdZ1hDG+7mZ4M4ftxFFZrhtiT0OXuwfBzmNtB3xhsJtYszPeizw33c9YNp8rvehKT3c4ldDCW6kA==
@@ -5657,7 +5662,7 @@ react-refresh@^0.4.0:
   resolved "https://registry.npmjs.org/react-refresh/-/react-refresh-0.4.3.tgz"
   integrity sha512-Hwln1VNuGl/6bVwnd0Xdn1e84gT/8T9aYNL+HAKDArLCS7LWjwr7StE30IEYbIkx0Vi3vs+coQxe+SQDbGbbpA==
 
-react@*, "react@^16.8.0 || ^17.0.0", react@17.0.2:
+react@*, "react@^16.8.0 || ^17.0.0", "react@> 15.0.0", react@17.0.2:
   version "17.0.2"
   resolved "https://registry.npmjs.org/react/-/react-17.0.2.tgz"
   integrity sha512-gnhPt75i/dq/z3/6q/0asP78D0u592D5L1pd7M8P+dck6Fu/jJeL6iVVK23fptSUZj8Vjf++7wXA8UNclGQcbA==
