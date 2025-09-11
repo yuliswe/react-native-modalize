@@ -27,7 +27,7 @@ function _Handle({ withHandle, handlePosition, handleStyle }: HandleProps) {
   }
 
   return (
-    <Animated.View style={handleStyles}>
+    <Animated.View style={handleStyles} testID="Modalize.Handle">
       <View style={shapeStyles} />
     </Animated.View>
   );

@@ -13,11 +13,11 @@ import {
   KeyboardEvent,
   LayoutChangeEvent,
   Modal,
+  type NativeEventSubscription,
   Platform,
   SectionList,
   StatusBar,
   View,
-  type NativeEventSubscription,
 } from 'react-native';
 import { FlatList, Gesture, GestureDetector, ScrollView } from 'react-native-gesture-handler';
 import Animated, {
@@ -70,6 +70,7 @@ const DEFAULT_AVOID_KEYBOARD_LIKE_IOS = Platform.select({
 const _ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>): JSX.Element | null => {
   // eslint-disable-next-line @typescript-eslint/unbound-method
   const {
+    testID,
     // Refs
     contentRef,
 
@@ -190,10 +191,10 @@ const _ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>): JSX.Elem
   const [keyboardHeight, setKeyboardHeight] = React.useState(0);
 
   // Memoize initial disableScroll value to prevent unnecessary re-calculations
-  const initialDisableScroll = React.useMemo(() => (alwaysOpen || snapPoints ? true : undefined), [
-    alwaysOpen,
-    snapPoints,
-  ]);
+  const initialDisableScroll = React.useMemo(
+    () => (alwaysOpen || snapPoints ? true : undefined),
+    [alwaysOpen, snapPoints],
+  );
   const [disableScroll, setDisableScroll] = React.useState(initialDisableScroll);
 
   const [cancelClose, setCancelClose] = React.useState(false);
@@ -206,13 +207,13 @@ const _ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>): JSX.Elem
   const overlay = useSharedValue(0);
   const beginScrollY = useSharedValue(0);
   const dragY = useSharedValue(0);
-  
+
   // Always create internal translateY
   const internalTranslateY = useSharedValue(screenHeight);
-  
+
   // Use external if provided, otherwise use internal
   const translateY = externalTranslateY || internalTranslateY;
-  
+
   const reverseBeginScrollY = useDerivedValue(() => -beginScrollY.value);
 
   const contentViewRef = React.useRef<ScrollView | FlatList<any> | SectionList<any>>(null);
@@ -327,7 +328,6 @@ const _ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>): JSX.Elem
     return true;
   }, [alwaysOpen, onBackButtonPress, handleAnimateClose]);
 
-
   const handleKeyboardShow = useCallback((event: KeyboardEvent): void => {
     const { height } = event.endCoordinates;
 
@@ -347,7 +347,6 @@ const _ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>): JSX.Elem
     'worklet';
 
     const { timing } = openAnimationConfig;
-
 
     let toValue = 0;
     let toPanValue = 0;
@@ -503,7 +502,7 @@ const _ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>): JSX.Elem
   const panGestureModalize = React.useMemo(() => {
     // Start with external pan gesture if provided, otherwise create new one
     const baseGesture = externalPanGesture || Gesture.Pan();
-    
+
     return baseGesture
       .enabled(panGestureEnabled)
       .shouldCancelWhenOutside(false)
@@ -760,10 +759,7 @@ const _ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>): JSX.Elem
     let backButtonListener: NativeEventSubscription | null = null;
 
     if (isVisible) {
-      backButtonListener = BackHandler.addEventListener(
-        'hardwareBackPress',
-        handleBackPress,
-      );
+      backButtonListener = BackHandler.addEventListener('hardwareBackPress', handleBackPress);
     }
 
     return () => {
@@ -824,38 +820,39 @@ const _ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>): JSX.Elem
   });
 
   // Memoize keyboard avoiding view props to prevent unnecessary re-creation
-  const keyboardAvoidingViewProps = React.useMemo((): Animated.AnimateProps<KeyboardAvoidingViewProps> => {
-    const props: Animated.AnimateProps<KeyboardAvoidingViewProps> = {
-      keyboardVerticalOffset: keyboardAvoidingOffset,
-      behavior: keyboardAvoidingBehavior,
-      enabled: avoidKeyboardLikeIOS,
-      style: [
-        s.modalize__content,
-        modalStyle,
-        {
-          height: actualModalHeight,
-          maxHeight: maxModalHeight,
-        },
-        animatedStyle,
-      ],
-    };
+  const keyboardAvoidingViewProps =
+    React.useMemo((): Animated.AnimateProps<KeyboardAvoidingViewProps> => {
+      const props: Animated.AnimateProps<KeyboardAvoidingViewProps> = {
+        keyboardVerticalOffset: keyboardAvoidingOffset,
+        behavior: keyboardAvoidingBehavior,
+        enabled: avoidKeyboardLikeIOS,
+        style: [
+          s.modalize__content,
+          modalStyle,
+          {
+            height: actualModalHeight,
+            maxHeight: maxModalHeight,
+          },
+          animatedStyle,
+        ],
+      };
 
-    if (!avoidKeyboardLikeIOS && !adjustToContentHeight) {
-      props.onLayout = handleModalizeContentLayout;
-    }
+      if (!avoidKeyboardLikeIOS && !adjustToContentHeight) {
+        props.onLayout = handleModalizeContentLayout;
+      }
 
-    return props;
-  }, [
-    keyboardAvoidingOffset,
-    keyboardAvoidingBehavior,
-    avoidKeyboardLikeIOS,
-    modalStyle,
-    actualModalHeight,
-    maxModalHeight,
-    animatedStyle,
-    adjustToContentHeight,
-    handleModalizeContentLayout,
-  ]);
+      return props;
+    }, [
+      keyboardAvoidingOffset,
+      keyboardAvoidingBehavior,
+      avoidKeyboardLikeIOS,
+      modalStyle,
+      actualModalHeight,
+      maxModalHeight,
+      animatedStyle,
+      adjustToContentHeight,
+      handleModalizeContentLayout,
+    ]);
 
   const renderModalize = (
     <View
@@ -866,7 +863,10 @@ const _ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>): JSX.Elem
       <GestureDetector gesture={panGestureModalize}>
         <View style={s.modalize__wrapper} pointerEvents="box-none">
           {showContent && (
-            <AnimatedKeyboardAvoidingView {...keyboardAvoidingViewProps}>
+            <AnimatedKeyboardAvoidingView
+              {...keyboardAvoidingViewProps}
+              testID="AnimatedKeyboardAvoidingView"
+            >
               <Handle
                 withHandle={withHandle}
                 handlePosition={handlePosition}
@@ -907,7 +907,6 @@ const _ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>): JSX.Elem
             panGestureComponentEnabled={panGestureComponentEnabled}
             handleComponentLayout={handleComponentLayout}
           />
-
           {/* Overlay with separate tap gesture detector */}
           <GestureDetector gesture={tapGestureOverlay}>
             <Overlay
@@ -915,7 +914,7 @@ const _ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>): JSX.Elem
               alwaysOpen={alwaysOpen}
               modalPosition={modalPosition}
               showContent={showContent}
-              overlayStyle={overlayStyle}
+              overlayStyle={{ ...(overlayStyle as Record<string, unknown>), zIndex: 1 }}
               overlay={overlay}
             />
           </GestureDetector>
@@ -928,6 +927,7 @@ const _ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>): JSX.Elem
     (child: JSX.Element): JSX.Element => (
       <Modal
         {...reactModalProps}
+        testID={`${testID ?? 'Modalize'}.Modal`}
         supportedOrientations={['landscape', 'portrait', 'portrait-upside-down']}
         onRequestClose={handleBackPress}
         hardwareAccelerated={USE_NATIVE_DRIVER}
@@ -961,4 +961,3 @@ export type { HandleProps } from './components/Handle';
 export type { HeaderAndFooterProps } from './components/HeaderAndFooter';
 export type { ModalizeContentProps } from './components/ModalizeContent';
 export type { OverlayProps } from './components/Overlay';
-

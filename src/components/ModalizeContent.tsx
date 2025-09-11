@@ -83,7 +83,11 @@ export function _ModalizeContent({
     return renderChildren ? renderChildren({ ...opts, children }) : children;
   }, [renderChildren, opts, children]);
 
-  return <Animated.View style={[style, childrenStyle]}>{contentElement}</Animated.View>;
+  return (
+    <Animated.View style={[style, childrenStyle]} testID="Modalize.Content">
+      {contentElement}
+    </Animated.View>
+  );
 }
 
 export const ModalizeContent = React.memo(_ModalizeContent);

@@ -46,6 +46,7 @@ function _HeaderAndFooter({
 
   return (
     <Animated.View
+      testID="Modalize.HeaderAndFooter"
       style={{ zIndex }}
       onLayout={(e: LayoutChangeEvent): void => handleComponentLayout(e, name, absolute)}
     >

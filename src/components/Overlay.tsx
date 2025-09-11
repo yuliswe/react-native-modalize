@@ -41,7 +41,7 @@ function _Overlay({
   }
 
   return (
-    <Animated.View style={s.overlay}>
+    <Animated.View style={s.overlay} testID="Modalize.Overlay">
       {showContent && (
         <Animated.View style={[s.overlay__background, overlayStyle, animatedStyle]} />
       )}

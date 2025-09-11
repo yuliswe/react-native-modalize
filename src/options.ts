@@ -42,6 +42,7 @@ export interface IConfigProps {
 }
 
 export interface IProps<ListItem = any> {
+  testID?: string;
   /**
    * A reference to the view (ScrollView, FlatList, SectionList) that provides the scroll behavior, where you will be able to access their owns methods.
    */
