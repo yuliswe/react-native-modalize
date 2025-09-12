@@ -148,6 +148,9 @@ const ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>) => {
 
   const [cancelClose, setCancelClose] = React.useState(false);
 
+  // Animation state tracking to prevent double animations
+  const [isAnimating, setIsAnimating] = React.useState(false);
+
   const cancelTranslateY = useSharedValue(1); // 1 by default to have the translateY animation running
   const overlay = useSharedValue(0);
   const dragY = useSharedValue(0);
@@ -172,6 +175,9 @@ const ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>) => {
     }
 
     const { timing } = closeAnimationConfig as any;
+
+    // Set animation state to prevent double animations
+    runOnJS(setIsAnimating)(true);
 
     cancelTranslateY.value = 1;
     beginScrollYValue.value = 0;
@@ -205,6 +211,7 @@ const ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>) => {
           lastSnap.value = snapPoints ? snaps[1] : 80;
           runOnJS(setIsVisible)(false);
           runOnJS(setInternalIsOpen)(false);
+          runOnJS(setIsAnimating)(false);
 
           if (onDidClose) {
             runOnJS(onDidClose)();
@@ -257,6 +264,8 @@ const ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>) => {
         newPosition = 'top';
       }
 
+      // Set animation state to prevent double animations
+      runOnJS(setIsAnimating)(true);
       runOnJS(setIsVisible)(true);
       runOnJS(setShowContent)(true);
 
@@ -284,6 +293,11 @@ const ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>) => {
       if (onPositionChange) {
         runOnJS(onPositionChange)(newPosition);
       }
+
+      // Reset animation state after animation completes
+      setTimeout(() => {
+        runOnJS(setIsAnimating)(false);
+      }, timing.duration);
     },
     [
       openAnimationConfig,
@@ -457,29 +471,48 @@ const ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>) => {
   // 1. Pan gesture for all swipe actions (modal content and overlay)
   // 2. Tap gesture only for overlay closing
 
-  React.useImperativeHandle(ref, () => ({
-    open(dest?: TOpen): void {
-      if (onWillOpen) {
-        onWillOpen();
-      }
+  React.useImperativeHandle(
+    ref,
+    () => ({
+      open(dest?: TOpen): void {
+        // Prevent opening if already animating
+        if (isAnimating) {
+          return;
+        }
 
-      setInternalIsOpen(true);
-      handleAnimateOpen(dest);
-    },
+        if (onWillOpen) {
+          onWillOpen();
+        }
 
-    close(): void {
-      setInternalIsOpen(false);
-      runOnUI(handleAnimateClose)();
-    },
-  }));
+        setInternalIsOpen(true);
+        handleAnimateOpen(dest);
+      },
+
+      close(): void {
+        // Prevent closing if already animating
+        if (isAnimating) {
+          return;
+        }
+
+        setInternalIsOpen(false);
+        runOnUI(handleAnimateClose)();
+      },
+    }),
+    [isAnimating, onWillOpen, handleAnimateOpen, handleAnimateClose],
+  );
 
   React.useEffect(() => {
+    // Prevent animations if already animating to avoid double animations
+    if (isAnimating) {
+      return;
+    }
+
     if (currentIsOpen && !isVisible) {
       handleAnimateOpen();
     } else if (!currentIsOpen && isVisible) {
       handleAnimateClose();
     }
-  }, [currentIsOpen, isVisible, handleAnimateOpen, handleAnimateClose]);
+  }, [currentIsOpen, isVisible, isAnimating, handleAnimateOpen, handleAnimateClose]);
 
   // Manage back button listener based on visibility
   React.useEffect(() => {
