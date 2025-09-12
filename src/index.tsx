@@ -176,8 +176,6 @@ const ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>) => {
     return baseValue * multiplier + clampedDiff;
   });
 
-  let willCloseModalize = false;
-
   const handleAnimateClose = useCallback((): void => {
     'worklet';
 
@@ -224,8 +222,6 @@ const ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>) => {
           if (onDidClose) {
             runOnJS(onDidClose)();
           }
-
-          willCloseModalize = false;
         }
       },
     );
@@ -316,6 +312,8 @@ const ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>) => {
 
   // V2 Gesture definitions with proper composition
   const panGestureModalize = React.useMemo(() => {
+    let willCloseModalize = false;
+
     // Start with external pan gesture if provided, otherwise create new one
     const baseGesture = externalPanGesture || Gesture.Pan();
 
@@ -422,24 +420,21 @@ const ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>) => {
   }, [
     externalPanGesture,
     panGestureEnabled,
-    snapPoints,
-    closeSnapPointStraightEnabled,
-    tapGestureEnabled,
-    closeAnimationConfig,
-    threshold,
-    velocity,
-    dragToss,
-    availableScreenHeight,
-    useNativeDriver,
-    onPositionChange,
-    handleAnimateClose,
-    actualModalHeight,
-    snaps,
-    overlay,
-    translateY,
     dragY,
-    beginScrollY,
-    setCancelClose,
+    cancelTranslateY,
+    threshold,
+    beginScrollYValue.value,
+    velocity,
+    lastSnap,
+    snapPoints,
+    cancelClose,
+    translateY,
+    dragToss,
+    snaps,
+    availableScreenHeight,
+    handleAnimateClose,
+    onPositionChange,
+    modalPosition,
   ]);
 
   const tapGestureOverlay = React.useMemo(
@@ -452,12 +447,10 @@ const ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>) => {
           if (onOverlayPress) {
             runOnJS(onOverlayPress)();
           }
-          if (!willCloseModalize) {
-            runOnJS(setInternalIsOpen)(false);
-            handleAnimateClose();
-          }
+          runOnJS(setInternalIsOpen)(false);
+          handleAnimateClose();
         }),
-    [closeOnOverlayTap, panGestureEnabled, onOverlayPress, willCloseModalize, handleAnimateClose],
+    [closeOnOverlayTap, panGestureEnabled, onOverlayPress, handleAnimateClose],
   );
 
   // Separate gesture detectors:
