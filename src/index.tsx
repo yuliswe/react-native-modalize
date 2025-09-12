@@ -14,7 +14,6 @@ import {
 } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
-  clamp,
   Easing as ReanimatedEasing,
   runOnJS,
   runOnUI,
@@ -71,9 +70,7 @@ const ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>) => {
     // Options
     handlePosition = 'outside',
     panGestureEnabled = true,
-    tapGestureEnabled = true,
     closeOnOverlayTap = true,
-    closeSnapPointStraightEnabled = true,
 
     // Animations
     openAnimationConfig = DEFAULT_OPEN_ANIMATION_CONFIG,
@@ -83,7 +80,6 @@ const ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>) => {
     velocity = 2800,
     translateY: externalTranslateY,
     panGesture: externalPanGesture,
-    useNativeDriver = true,
 
     // Elements visibilities
     withReactModal = false,
@@ -153,9 +149,7 @@ const ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>) => {
   const [cancelClose, setCancelClose] = React.useState(false);
 
   const cancelTranslateY = useSharedValue(1); // 1 by default to have the translateY animation running
-  const componentTranslateY = useSharedValue(0);
   const overlay = useSharedValue(0);
-  const beginScrollY = useSharedValue(0);
   const dragY = useSharedValue(0);
 
   // Always create internal translateY
@@ -164,16 +158,10 @@ const ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>) => {
   // Use external if provided, otherwise use internal
   const translateY = externalTranslateY || internalTranslateY;
 
-  const reverseBeginScrollY = useDerivedValue(() => -beginScrollY.value);
-
-  const componentDragEnabled = useDerivedValue(() => componentTranslateY.value === 1);
-
   // Optimized calculation with minimal type conversions and cached values
   const value = useDerivedValue(() => {
-    const multiplier = componentDragEnabled.value ? 1 : cancelTranslateY.value;
-    const clampedDiff = clamp(reverseBeginScrollY.value, -screenHeight, 0);
     const baseValue = translateY.value + dragY.value;
-    return baseValue * multiplier + clampedDiff;
+    return baseValue * cancelTranslateY.value;
   });
 
   const handleAnimateClose = useCallback((): void => {
@@ -187,7 +175,6 @@ const ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>) => {
 
     cancelTranslateY.value = 1;
     beginScrollYValue.value = 0;
-    beginScrollY.value = 0;
 
     // Calculate current visual position and update translateY to start from there
     const currentVisualPosition = translateY.value + dragY.value;
@@ -225,7 +212,20 @@ const ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>) => {
         }
       },
     );
-  }, [closeAnimationConfig, snapPoints, snaps, screenHeight, onDidClose]);
+  }, [
+    closeAnimationConfig,
+    snapPoints,
+    snaps,
+    screenHeight,
+    onDidClose,
+    beginScrollYValue,
+    cancelTranslateY,
+    dragY,
+    lastSnap,
+    onWillClose,
+    overlay,
+    translateY,
+  ]);
 
   const handleBackPress = useCallback((): boolean => {
     if (onBackButtonPress) {

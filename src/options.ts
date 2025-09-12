@@ -112,22 +112,10 @@ export interface IProps<ListItem = any> {
   panGestureComponentEnabled?: boolean;
 
   /**
-   * Define if the `TapGestureHandler` wrapping Modalize's core should be enable or not.
-   * @default true
-   */
-  tapGestureEnabled?: boolean;
-
-  /**
    * Using this prop will enable/disable overlay tap gesture.
    * @default true
    */
   closeOnOverlayTap?: boolean;
-
-  /**
-   * Define if `snapPoint` props should close straight when swiping down or come back to initial position.
-   * @default true
-   */
-  closeSnapPointStraightEnabled?: boolean;
 
   /**
    * Object to change the open animations.
@@ -180,12 +168,6 @@ export interface IProps<ListItem = any> {
    * while allowing the parent to add additional custom handlers.
    */
   panGesture?: any; // Gesture.Pan() type from react-native-gesture-handler
-
-  /**
-   * Define if the Animated.Value uses the native thread to execute the animations.
-   * @default true
-   */
-  useNativeDriver?: boolean;
 
   /**
    * Define if Modalize has to be wrap with the Modal component from react-native.
