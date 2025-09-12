@@ -1,4 +1,4 @@
-#!/usr/bin/env tsx
+#!/usr/bin/env tsx --tsconfig ./tsconfig.json
 
 import { execSync, spawn } from 'child_process';
 import { readFileSync, existsSync, rmSync } from 'fs';
@@ -303,9 +303,4 @@ Full Changelog: https://github.com/${repoOwner}/${repoName}/compare/v${version}.
   }
 }
 
-// Run the release process
-if (require.main === module) {
-  await releaseToGithub();
-}
-
-export { releaseToGithub };
+void releaseToGithub();
