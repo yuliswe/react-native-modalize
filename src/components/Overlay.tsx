@@ -15,7 +15,7 @@ export interface OverlayProps {
   overlay?: SharedValue<number>;
 }
 
-function _Overlay({
+function PrivateOverlay({
   withOverlay,
   alwaysOpen,
   modalPosition,
@@ -49,4 +49,4 @@ function _Overlay({
   );
 }
 
-export const Overlay = React.memo(_Overlay);
+export const Overlay = React.memo(PrivateOverlay);

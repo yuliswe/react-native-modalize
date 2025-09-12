@@ -1,18 +1,11 @@
 import * as React from 'react';
-import {
-  Animated,
-  ViewStyle,
-  EasingFunction,
-  SectionList,
-  StyleProp,
-  ModalProps,
-} from 'react-native';
+import { ViewStyle, EasingFunction, SectionList, StyleProp, ModalProps } from 'react-native';
 import {
   ScrollView as RNGHScrollView,
   FlatList as RNGHFlatList,
 } from 'react-native-gesture-handler';
 
-import { LayoutEvent, ScrollEvent } from './types';
+import { LayoutEvent } from './types';
 
 export type TOpen = 'default' | 'top';
 export type TClose = 'default' | 'alwaysOpen';
@@ -53,27 +46,6 @@ export interface IProps<ListItem = any> {
    */
   children?: React.ReactNode;
 
-  // Note: Removed scrollViewProps, flatListProps, sectionListProps
-  // Use renderChildren to provide your own scrollable components
-
-  /**
-   * A function that renders custom content with scroll/gesture event props
-   */
-  renderChildren?: (props: {
-    ref: React.RefObject<RNGHScrollView | RNGHFlatList<ListItem> | SectionList<ListItem>>;
-    bounces: boolean;
-    scrollEventThrottle: number;
-    onLayout: (event: LayoutEvent) => void;
-    scrollEnabled: boolean;
-    keyboardDismissMode:
-      | Animated.Value
-      | Animated.AnimatedInterpolation
-      | 'interactive'
-      | 'on-drag';
-    onScroll: (event: ScrollEvent) => void;
-    children: React.ReactNode;
-  }) => JSX.Element;
-
   /**
    * Define the style of the root modal component.
    */
@@ -106,11 +78,6 @@ export interface IProps<ListItem = any> {
   snapPoints?: number[];
 
   /**
-   * A number to define the modal's total height.
-   */
-  modalHeight?: number;
-
-  /**
    * A number to define the modal's top offset.
    */
   modalTopOffset?: number;
@@ -119,12 +86,6 @@ export interface IProps<ListItem = any> {
    * Using this props will show the modal all the time, and the number represents how expanded the modal has to be.
    */
   alwaysOpen?: number;
-
-  /**
-   * Shrink the modal to your content's height.
-   * @default false
-   */
-  adjustToContentHeight?: boolean;
 
   /**
    * Define where the handle on top of the modal should be positioned.
@@ -137,24 +98,6 @@ export interface IProps<ListItem = any> {
    * @default true
    */
   disableScrollIfPossible?: boolean;
-
-  /**
-   * Define keyboard's Android behavior like iOS's one.
-   * @default Platform.select({ ios: true, android: false })
-   */
-  avoidKeyboardLikeIOS?: boolean;
-
-  /**
-   * Define the behavior of the keyboard when having inputs inside the modal.
-   * @default padding
-   */
-  keyboardAvoidingBehavior?: 'height' | 'position' | 'padding';
-
-  /**
-   * Define an offset to the KeyboardAvoidingView component wrapping the ScrollView.
-   * @default 0
-   */
-  keyboardAvoidingOffset?: number;
 
   /**
    * Using this prop will enable/disable pan gesture.
@@ -223,11 +166,6 @@ export interface IProps<ListItem = any> {
    * @default 2800
    */
   velocity?: number | undefined;
-
-  /**
-   * SharedValue of the modal position between 0 and 1.
-   */
-  panGestureAnimatedValue?: { value: number };
 
   /**
    * External SharedValue to control the modal's translateY position in pixels.
