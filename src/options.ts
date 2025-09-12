@@ -8,7 +8,6 @@ import {
 import { LayoutEvent } from './types';
 
 export type TOpen = 'default' | 'top';
-export type TClose = 'default' | 'alwaysOpen';
 export type TPosition = 'initial' | 'top';
 export type TStyle = StyleProp<ViewStyle>;
 
@@ -83,9 +82,10 @@ export interface IProps<ListItem = any> {
   modalTopOffset?: number;
 
   /**
-   * Using this props will show the modal all the time, and the number represents how expanded the modal has to be.
+   * Controls whether the modal is open or closed. If provided, the modal becomes a controlled component.
+   * If not provided, the modal uses internal state to manage its open/closed state.
    */
-  alwaysOpen?: number;
+  isOpen?: boolean;
 
   /**
    * Define where the handle on top of the modal should be positioned.
@@ -233,7 +233,7 @@ export interface IProps<ListItem = any> {
   /**
    * Callback function when the modal is opened.
    */
-  onOpened?(): void;
+  onDidOpen?(): void;
 
   /**
    * Callback function when the `close` method is triggered.
@@ -243,7 +243,7 @@ export interface IProps<ListItem = any> {
   /**
    * Callback function when the modal is closed.
    */
-  onClosed?(): void;
+  onDidClose?(): void;
 
   /**
    * onBackButtonPress is called when the user taps the hardware back button on
@@ -281,9 +281,6 @@ export interface IHandles {
 
   /**
    * The method to close Modalize. You don't need to call it to dismiss the modal, since you can swipe down to dismiss.
-   *
-   * If you are using `alwaysOpen` prop, you can supply a `dest` argument to the `close` method to reset it
-   * to the initial position `close('alwaysOpen')`, and avoiding to close it completely.
    */
-  close(dest?: TClose): void;
+  close(): void;
 }

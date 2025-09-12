@@ -25,14 +25,13 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Handle } from './components/Handle';
 import { Overlay } from './components/Overlay';
-import { IHandles, IProps, TClose, TOpen, TPosition } from './options';
+import { IHandles, IProps, TOpen, TPosition } from './options';
 import s from './styles';
 import { LayoutEvent, PanGestureEvent, PanGestureStateEvent } from './types';
 import { useDimensions } from './utils/use-dimensions';
 
 // Removed SCROLL_THRESHOLD as it's no longer needed with the new snap logic
 const USE_NATIVE_DRIVER = true;
-const PAN_DURATION = 150;
 
 // Animation constants
 const DEFAULT_OPEN_ANIMATION_CONFIG = {
@@ -67,7 +66,7 @@ const ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>) => {
     // Layout
     snapPoints,
     modalTopOffset = DEFAULT_MODAL_TOP_OFFSET,
-    alwaysOpen,
+    isOpen,
 
     // Options
     handlePosition = 'outside',
@@ -94,9 +93,9 @@ const ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>) => {
 
     // Callbacks
     onWillOpen,
-    onOpened,
+    onDidOpen,
     onWillClose,
-    onClosed,
+    onDidClose,
     onBackButtonPress,
     onPositionChange,
     onOverlayPress,
@@ -148,6 +147,9 @@ const ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>) => {
   const [isVisible, setIsVisible] = React.useState(false);
   const [showContent, setShowContent] = React.useState(true);
 
+  const [internalIsOpen, setInternalIsOpen] = React.useState(true);
+  const currentIsOpen = isOpen !== undefined ? isOpen : internalIsOpen;
+
   const [cancelClose, setCancelClose] = React.useState(false);
 
   const cancelTranslateY = useSharedValue(1); // 1 by default to have the translateY animation running
@@ -176,86 +178,60 @@ const ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>) => {
 
   let willCloseModalize = false;
 
-  const handleAnimateClose = useCallback(
-    (dest: TClose = 'default'): void => {
-      'worklet';
+  const handleAnimateClose = useCallback((): void => {
+    'worklet';
 
-      if (onWillClose) {
-        runOnJS(onWillClose)();
-      }
-
-      const { timing } = closeAnimationConfig as any;
-      const toInitialAlwaysOpen = dest === 'alwaysOpen' && Boolean(alwaysOpen);
-      const toValue =
-        toInitialAlwaysOpen && alwaysOpen ? (actualModalHeight || 0) - alwaysOpen : screenHeight;
-
-      cancelTranslateY.value = 1;
-      beginScrollYValue.value = 0;
-      beginScrollY.value = 0;
-
-      // Calculate current visual position and update translateY to start from there
-      const currentVisualPosition = translateY.value + dragY.value;
-      translateY.value = currentVisualPosition;
-      dragY.value = 0;
-
-      // Animate overlay
-      overlay.value = withTiming(0, {
-        duration: timing.duration,
-        easing: ReanimatedEasing.ease,
-      });
-
-      // Reset dragY on UI thread
-      dragY.value = 0;
-
-      // Animate translateY from current position to destination
-      translateY.value = withTiming(
-        toValue,
-        {
-          duration: timing.duration,
-          easing: ReanimatedEasing.linear,
-        },
-        finished => {
-          'worklet';
-          if (finished) {
-            // Run these only after animation finishes
-            runOnJS(setShowContent)(toInitialAlwaysOpen);
-            lastSnap.value = snapPoints ? snaps[1] : 80;
-            runOnJS(setIsVisible)(toInitialAlwaysOpen);
-
-            if (onClosed) {
-              runOnJS(onClosed)();
-            }
-
-            if (alwaysOpen && dest === 'alwaysOpen' && onPositionChange) {
-              runOnJS(onPositionChange)('initial');
-            }
-
-            if (alwaysOpen && dest === 'alwaysOpen') {
-              modalPosition.value = 'initial';
-            }
-
-            willCloseModalize = false;
-          }
-        },
-      );
-    },
-    [
-      closeAnimationConfig,
-      snapPoints,
-      snaps,
-      alwaysOpen,
-      actualModalHeight,
-      screenHeight,
-      onClosed,
-      onPositionChange,
-    ],
-  );
-
-  const handleBackPress = useCallback((): boolean => {
-    if (alwaysOpen) {
-      return false;
+    if (onWillClose) {
+      runOnJS(onWillClose)();
     }
 
+    const { timing } = closeAnimationConfig as any;
+
+    cancelTranslateY.value = 1;
+    beginScrollYValue.value = 0;
+    beginScrollY.value = 0;
+
+    // Calculate current visual position and update translateY to start from there
+    const currentVisualPosition = translateY.value + dragY.value;
+    translateY.value = currentVisualPosition;
+    dragY.value = 0;
+
+    // Animate overlay
+    overlay.value = withTiming(0, {
+      duration: timing.duration,
+      easing: ReanimatedEasing.ease,
+    });
+
+    // Reset dragY on UI thread
+    dragY.value = 0;
+
+    // Animate translateY from current position to destination
+    translateY.value = withTiming(
+      screenHeight,
+      {
+        duration: timing.duration,
+        easing: ReanimatedEasing.linear,
+      },
+      finished => {
+        'worklet';
+        if (finished) {
+          // Run these only after animation finishes
+          runOnJS(setShowContent)(false);
+          lastSnap.value = snapPoints ? snaps[1] : 80;
+          runOnJS(setIsVisible)(false);
+          runOnJS(setInternalIsOpen)(false);
+
+          if (onDidClose) {
+            runOnJS(onDidClose)();
+          }
+
+          willCloseModalize = false;
+        }
+      },
+    );
+  }, [closeAnimationConfig, snapPoints, snaps, screenHeight, onDidClose]);
+
+  const handleBackPress = useCallback((): boolean => {
     if (onBackButtonPress) {
       return onBackButtonPress();
     } else {
@@ -263,10 +239,10 @@ const ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>) => {
     }
 
     return true;
-  }, [alwaysOpen, onBackButtonPress, handleAnimateClose]);
+  }, [onBackButtonPress, handleAnimateClose]);
 
   const handleAnimateOpen = useCallback(
-    (alwaysOpenValue: number | undefined, dest: TOpen = 'default'): void => {
+    (dest: TOpen = 'default'): void => {
       'worklet';
 
       const { timing } = openAnimationConfig;
@@ -276,23 +252,20 @@ const ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>) => {
 
       if (dest === 'top') {
         toValue = 0;
-      } else if (alwaysOpenValue) {
-        toValue = (actualModalHeight || 0) - alwaysOpenValue;
+        newPosition = 'top';
       } else if (snapPoints && snapPoints.length > 0) {
         toValue = availableScreenHeight - snapPoints[0]; // Use first snap point for initial open
+        newPosition = 'initial';
+      } else {
+        toValue = 0;
+        newPosition = 'top';
       }
 
       runOnJS(setIsVisible)(true);
       runOnJS(setShowContent)(true);
 
-      if ((alwaysOpenValue && dest !== 'top') || (snapPoints && dest === 'default')) {
-        newPosition = 'initial';
-      } else {
-        newPosition = 'top';
-      }
-
       // Animate overlay
-      overlay.value = withTiming(alwaysOpenValue && dest === 'default' ? 0 : 1, {
+      overlay.value = withTiming(1, {
         duration: timing.duration,
         easing: ReanimatedEasing.ease,
       });
@@ -306,8 +279,8 @@ const ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>) => {
       translateY.value = translateYAnimation;
 
       // Use runOnJS to handle the completion callback
-      if (onOpened) {
-        runOnJS(onOpened)();
+      if (onDidOpen) {
+        runOnJS(onDidOpen)();
       }
 
       modalPosition.value = newPosition;
@@ -318,10 +291,9 @@ const ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>) => {
     },
     [
       openAnimationConfig,
-      actualModalHeight,
       snapPoints,
       availableScreenHeight,
-      onOpened,
+      onDidOpen,
       onPositionChange,
       modalPosition,
       translateY,
@@ -371,7 +343,6 @@ const ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>) => {
       .onEnd((event: PanGestureStateEvent) => {
         'worklet';
 
-        const { timing } = closeAnimationConfig;
         const { velocityY, translationY } = event;
         // Removed negativeReverseScroll as it's no longer needed with the new snap logic
         const thresholdProps = translationY > threshold && beginScrollYValue.value === 0;
@@ -382,7 +353,7 @@ const ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>) => {
         const toValue = translationY - beginScrollYValue.value;
         let destSnapPoint = lastSnap.value; // Start with current position
 
-        if (snapPoints || alwaysOpen) {
+        if (snapPoints) {
           const endOffsetY = lastSnap.value + toValue + dragToss * velocityY;
 
           // Find the nearest snap point with optimized search
@@ -402,26 +373,18 @@ const ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>) => {
 
           destSnapPoint = nearestSnap;
 
-          // Handle special cases
-          if (!alwaysOpen) {
-            if (nearestSnap === availableScreenHeight) {
-              // Snap to closed position - close the modal
-              willCloseModalize = true;
-              handleAnimateClose('default');
-            } else {
-              // Snap to snap point or full open - don't close
-              willCloseModalize = false;
-            }
-          }
-
-          // For alwaysOpen props
-          if (alwaysOpen && beginScrollYValue.value <= 0) {
-            destSnapPoint = (actualModalHeight || 0) - alwaysOpen;
+          if (nearestSnap === availableScreenHeight) {
+            willCloseModalize = true;
+            runOnJS(setInternalIsOpen)(false);
+            handleAnimateClose();
+          } else {
+            // Snap to snap point or full open - don't close
             willCloseModalize = false;
           }
-        } else if (closeThreshold && !alwaysOpen && !cancelClose) {
+        } else if (closeThreshold && !cancelClose) {
           willCloseModalize = true;
-          handleAnimateClose('default');
+          runOnJS(setInternalIsOpen)(false);
+          handleAnimateClose();
         }
 
         if (willCloseModalize) {
@@ -437,13 +400,6 @@ const ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>) => {
 
         // Update lastSnap to the destination snap point for next gesture
         lastSnap.value = destSnapPoint;
-
-        if (alwaysOpen) {
-          overlay.value = withTiming(destSnapPoint <= 0 ? 1 : 0, {
-            duration: timing.duration,
-            easing: ReanimatedEasing.ease,
-          });
-        }
 
         // Animate to destination snap point
         translateY.value = withTiming(destSnapPoint, {
@@ -468,7 +424,6 @@ const ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>) => {
     panGestureEnabled,
     snapPoints,
     closeSnapPointStraightEnabled,
-    alwaysOpen,
     tapGestureEnabled,
     closeAnimationConfig,
     threshold,
@@ -497,19 +452,12 @@ const ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>) => {
           if (onOverlayPress) {
             runOnJS(onOverlayPress)();
           }
-          const dest = !!alwaysOpen ? 'alwaysOpen' : 'default';
           if (!willCloseModalize) {
-            handleAnimateClose(dest);
+            runOnJS(setInternalIsOpen)(false);
+            handleAnimateClose();
           }
         }),
-    [
-      closeOnOverlayTap,
-      panGestureEnabled,
-      onOverlayPress,
-      alwaysOpen,
-      willCloseModalize,
-      handleAnimateClose,
-    ],
+    [closeOnOverlayTap, panGestureEnabled, onOverlayPress, willCloseModalize, handleAnimateClose],
   );
 
   // Separate gesture detectors:
@@ -522,19 +470,23 @@ const ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>) => {
         onWillOpen();
       }
 
-      handleAnimateOpen(alwaysOpen, dest);
+      setInternalIsOpen(true);
+      handleAnimateOpen(dest);
     },
 
-    close(dest?: TClose): void {
-      runOnUI(handleAnimateClose)(dest);
+    close(): void {
+      setInternalIsOpen(false);
+      runOnUI(handleAnimateClose)();
     },
   }));
 
   React.useEffect(() => {
-    if (alwaysOpen) {
-      handleAnimateOpen(alwaysOpen);
+    if (currentIsOpen && !isVisible) {
+      handleAnimateOpen();
+    } else if (!currentIsOpen && isVisible) {
+      handleAnimateClose();
     }
-  }, [alwaysOpen, handleAnimateOpen]);
+  }, [currentIsOpen, isVisible, handleAnimateOpen, handleAnimateClose]);
 
   // Manage back button listener based on visibility
   React.useEffect(() => {
@@ -574,17 +526,13 @@ const ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>) => {
   }, [actualModalHeight, availableScreenHeight, animatedStyle]);
 
   const renderModalize = (
-    <View
-      style={[s.modalize, rootStyle]}
-      pointerEvents={alwaysOpen || !withOverlay ? 'box-none' : 'auto'}
-    >
+    <View style={[s.modalize, rootStyle]} pointerEvents={!withOverlay ? 'box-none' : 'auto'}>
       {/* GestureDetector for pan gestures - handles all swipe actions */}
       <GestureDetector gesture={panGestureModalize}>
         <View style={s.modalize__wrapper} pointerEvents="box-none">
           <GestureDetector gesture={tapGestureOverlay}>
             <Overlay
               withOverlay={withOverlay}
-              alwaysOpen={alwaysOpen}
               modalPosition={modalPosition}
               showContent={showContent}
               overlayStyle={overlayStyle}

@@ -8,31 +8,19 @@ import s from '../styles';
 
 export interface OverlayProps {
   withOverlay: boolean;
-  alwaysOpen: number | undefined;
   modalPosition: SharedValue<'initial' | 'top'>;
   showContent: boolean;
   overlayStyle?: TStyle;
   overlay?: SharedValue<number>;
 }
 
-function PrivateOverlay({
-  withOverlay,
-  alwaysOpen,
-  modalPosition,
-  showContent,
-  overlayStyle,
-  overlay,
-}: OverlayProps) {
+function PrivateOverlay({ withOverlay, showContent, overlayStyle, overlay }: OverlayProps) {
   const animatedStyle = useAnimatedStyle(() => {
-    const currentPosition = modalPosition.value;
-    const pointerEvents =
-      alwaysOpen && (currentPosition === 'initial' || !currentPosition) ? 'box-none' : 'auto';
-
     const opacity = overlay ? overlay.value : 0;
 
     return {
       opacity,
-      pointerEvents,
+      pointerEvents: 'auto',
     };
   });
 
