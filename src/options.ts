@@ -3,6 +3,7 @@ import { ViewStyle, EasingFunction, SectionList, StyleProp, ModalProps } from 'r
 import {
   ScrollView as RNGHScrollView,
   FlatList as RNGHFlatList,
+  type PanGesture,
 } from 'react-native-gesture-handler';
 
 import { LayoutEvent } from './types';
@@ -100,12 +101,6 @@ export interface IProps<ListItem = any> {
   disableScrollIfPossible?: boolean;
 
   /**
-   * Using this prop will enable/disable pan gesture.
-   * @default true
-   */
-  panGestureEnabled?: boolean;
-
-  /**
    * Define if HeaderComponent/FooterComponent/FloatingComponent should have pan gesture enable (Android specific). When enable it might break touchable inside the view.
    * @default false
    */
@@ -167,7 +162,7 @@ export interface IProps<ListItem = any> {
    * If provided, this will be composed with the internal pan gesture, preserving all default behavior
    * while allowing the parent to add additional custom handlers.
    */
-  panGesture?: any; // Gesture.Pan() type from react-native-gesture-handler
+  panGesture?: PanGesture; // Gesture.Pan() type from react-native-gesture-handler
 
   /**
    * Define if Modalize has to be wrap with the Modal component from react-native.

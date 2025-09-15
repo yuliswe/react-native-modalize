@@ -69,7 +69,6 @@ const ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>) => {
 
     // Options
     handlePosition = 'outside',
-    panGestureEnabled = true,
     closeOnOverlayTap = true,
 
     // Animations
@@ -332,9 +331,8 @@ const ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>) => {
     const baseGesture = externalPanGesture || Gesture.Pan();
 
     return baseGesture
-      .enabled(panGestureEnabled)
       .shouldCancelWhenOutside(false)
-      .onBegin(() => {
+      .onStart(() => {
         'worklet';
 
         // Handle pan begin for main modalize
@@ -433,7 +431,6 @@ const ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>) => {
       });
   }, [
     externalPanGesture,
-    panGestureEnabled,
     dragY,
     cancelTranslateY,
     threshold,
@@ -454,7 +451,7 @@ const ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>) => {
   const tapGestureOverlay = React.useMemo(
     () =>
       Gesture.Tap()
-        .enabled(closeOnOverlayTap !== undefined ? closeOnOverlayTap : panGestureEnabled)
+        .enabled(closeOnOverlayTap)
         .onStart(() => {
           'worklet';
 
@@ -463,8 +460,9 @@ const ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>) => {
           }
           runOnJS(setInternalIsOpen)(false);
           handleAnimateClose();
-        }),
-    [closeOnOverlayTap, panGestureEnabled, onOverlayPress, handleAnimateClose],
+        })
+        .requireExternalGestureToFail(panGestureModalize),
+    [closeOnOverlayTap, onOverlayPress, handleAnimateClose, panGestureModalize],
   );
 
   // Separate gesture detectors:
