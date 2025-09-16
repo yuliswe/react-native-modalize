@@ -127,7 +127,6 @@ const ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>) => {
   const actualModalHeight = _actualModalHeight;
 
   // UI thread only states - moved to shared values
-  const beginScrollYValue = useSharedValue(0);
   const lastSnap = useSharedValue(0);
   const modalPosition = useSharedValue<TPosition>('initial');
 
@@ -179,7 +178,6 @@ const ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>) => {
     runOnJS(setIsAnimating)(true);
 
     cancelTranslateY.value = 1;
-    beginScrollYValue.value = 0;
 
     // Calculate current visual position and update translateY to start from there
     const currentVisualPosition = translateY.value + dragY.value;
@@ -224,7 +222,6 @@ const ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>) => {
     snaps,
     screenHeight,
     onDidClose,
-    beginScrollYValue,
     cancelTranslateY,
     dragY,
     lastSnap,
@@ -355,12 +352,10 @@ const ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>) => {
 
         const { velocityY, translationY } = event;
         // Removed negativeReverseScroll as it's no longer needed with the new snap logic
-        const thresholdProps = translationY > threshold && beginScrollYValue.value === 0;
-        const closeThreshold = velocity
-          ? (beginScrollYValue.value <= 20 && velocityY >= velocity) || thresholdProps
-          : thresholdProps;
+        const thresholdProps = translationY > threshold;
+        const closeThreshold = velocity ? velocityY >= velocity || thresholdProps : thresholdProps;
 
-        const toValue = translationY - beginScrollYValue.value;
+        const toValue = translationY;
         let destSnapPoint = lastSnap.value; // Start with current position
 
         if (snapPoints) {
@@ -417,35 +412,28 @@ const ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>) => {
           easing: ReanimatedEasing.out(ReanimatedEasing.ease),
         });
 
-        if (beginScrollYValue.value <= 0) {
-          const modalPositionValue = destSnapPoint <= 0 ? 'top' : 'initial';
+        const modalPositionValue = destSnapPoint <= 0 ? 'top' : 'initial';
 
-          if (onPositionChange && modalPosition.value !== modalPositionValue) {
-            runOnJS(onPositionChange)(modalPositionValue);
-          }
+        if (onPositionChange && modalPosition.value !== modalPositionValue) {
+          runOnJS(onPositionChange)(modalPositionValue);
+        }
 
-          if (modalPosition.value !== modalPositionValue) {
-            modalPosition.value = modalPositionValue;
-          }
+        if (modalPosition.value !== modalPositionValue) {
+          modalPosition.value = modalPositionValue;
         }
       });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     externalPanGesture,
-    dragY,
-    cancelTranslateY,
     threshold,
-    beginScrollYValue.value,
     velocity,
-    lastSnap,
     snapPoints,
     cancelClose,
-    translateY,
     dragToss,
     snaps,
     availableScreenHeight,
     handleAnimateClose,
     onPositionChange,
-    modalPosition,
   ]);
 
   const tapGestureOverlay = React.useMemo(
