@@ -157,12 +157,13 @@ const ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>) => {
   const internalTranslateY = useSharedValue(screenHeight);
 
   // Use external if provided, otherwise use internal
-  const translateY = externalTranslateY || internalTranslateY;
+  const animiatedTranslateY = externalTranslateY || internalTranslateY;
 
   // Optimized calculation with minimal type conversions and cached values
-  const value = useDerivedValue(() => {
-    const baseValue = translateY.value + dragY.value;
-    return baseValue * cancelTranslateY.value;
+  const finalTranslateY = useDerivedValue(() => {
+    const baseValue = animiatedTranslateY.value + dragY.value;
+    const unclamped = baseValue * cancelTranslateY.value;
+    return Math.max(0, Math.min(availableScreenHeight, unclamped));
   });
 
   const handleAnimateClose = useCallback((): void => {
@@ -180,8 +181,7 @@ const ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>) => {
     cancelTranslateY.value = 1;
 
     // Calculate current visual position and update translateY to start from there
-    const currentVisualPosition = translateY.value + dragY.value;
-    translateY.value = currentVisualPosition;
+    animiatedTranslateY.value = animiatedTranslateY.value + dragY.value;
     dragY.value = 0;
 
     // Animate overlay
@@ -194,7 +194,7 @@ const ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>) => {
     dragY.value = 0;
 
     // Animate translateY from current position to destination
-    translateY.value = withTiming(
+    animiatedTranslateY.value = withTiming(
       screenHeight,
       {
         duration: timing.duration,
@@ -227,7 +227,7 @@ const ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>) => {
     lastSnap,
     onWillClose,
     overlay,
-    translateY,
+    animiatedTranslateY,
   ]);
 
   const handleBackPress = useCallback((): boolean => {
@@ -277,7 +277,7 @@ const ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>) => {
         easing: ReanimatedEasing.out(ReanimatedEasing.ease),
       });
 
-      translateY.value = translateYAnimation;
+      animiatedTranslateY.value = translateYAnimation;
 
       // Use runOnJS to handle the completion callback
       if (onDidOpen) {
@@ -295,6 +295,7 @@ const ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>) => {
         runOnJS(setIsAnimating)(false);
       }, timing.duration);
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       openAnimationConfig,
       snapPoints,
@@ -302,7 +303,6 @@ const ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>) => {
       onDidOpen,
       onPositionChange,
       modalPosition,
-      translateY,
       overlay,
     ],
   );
@@ -397,17 +397,14 @@ const ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>) => {
         }
 
         // Calculate the current visual position (where the modal actually is visually)
-        const currentVisualPosition = translateY.value + dragY.value;
-
-        // Update translateY to the current visual position and reset drag offset
-        translateY.value = currentVisualPosition;
+        animiatedTranslateY.value = animiatedTranslateY.value + dragY.value;
         dragY.value = 0;
 
         // Update lastSnap to the destination snap point for next gesture
         lastSnap.value = destSnapPoint;
 
         // Animate to destination snap point
-        translateY.value = withTiming(destSnapPoint, {
+        animiatedTranslateY.value = withTiming(destSnapPoint, {
           duration: 300,
           easing: ReanimatedEasing.out(ReanimatedEasing.ease),
         });
@@ -514,16 +511,7 @@ const ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>) => {
   }, [isVisible, handleBackPress]);
 
   const animatedStyle = useAnimatedStyle(() => {
-    const translateYValue = value.value;
-
-    // Optimized calculation with early return and cached bounds
-    if (translateYValue <= 0) {
-      return { transform: [{ translateY: 0 }] };
-    }
-
-    // Cache the bounds to avoid repeated calculations
-    const clampedValue = Math.max(-40, Math.min(availableScreenHeight, translateYValue));
-    return { transform: [{ translateY: clampedValue }] };
+    return { transform: [{ translateY: finalTranslateY.value }] };
   });
 
   const animatedViewStyle = React.useMemo(() => {
