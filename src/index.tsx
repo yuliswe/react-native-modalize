@@ -181,20 +181,22 @@ const ModalizeBase = (props: IProps, ref: React.Ref<IHandles>) => {
   // Always create internal translateY
   const animiatedTranslateY = useSharedValue(screenHeight);
 
+  const handleWillCloseOnJS = useCallback(() => {
+    onWillClose?.();
+    setInternalIsOpen(false);
+  }, [onWillClose]);
+
   const handleDidCloseOnJS = useCallback(() => {
     setShowContent(false);
     setIsVisible(false);
-    setInternalIsOpen(false);
     setIsAnimating(false);
     onDidClose?.();
   }, [onDidClose]);
 
-  const handleAnimateClose = useCallback((): void => {
+  const handleAnimateCloseOnUI = useCallback((): void => {
     'worklet';
 
-    if (onWillClose) {
-      runOnJS(onWillClose)();
-    }
+    runOnJS(handleWillCloseOnJS)();
 
     const { timing } = closeAnimationConfig as any;
 
@@ -238,69 +240,67 @@ const ModalizeBase = (props: IProps, ref: React.Ref<IHandles>) => {
     if (onBackButtonPress) {
       return onBackButtonPress();
     } else {
-      runOnUI(handleAnimateClose)();
+      handleAnimateCloseOnUI();
     }
 
     return true;
-  }, [onBackButtonPress, handleAnimateClose]);
+  }, [onBackButtonPress, handleAnimateCloseOnUI]);
 
-  const handleAnimateOpen = useCallback(
+  const handleWillOpenOnJS = useCallback(() => {
+    onWillOpen?.();
+    setInternalIsOpen(true);
+    setIsAnimating(true);
+    setIsVisible(true);
+    setShowContent(true);
+  }, [onWillOpen]);
+
+  const handleDidOpenOnJS = useCallback(() => {
+    onDidOpen?.();
+    setIsAnimating(false);
+  }, [onDidOpen]);
+
+  const handleAnimateOpenOnUI = useCallback(
     (dest: TOpen = 'default'): void => {
       'worklet';
 
       const { timing } = openAnimationConfig;
 
       let toValue = 0;
-      let newPosition: TPosition;
 
       if (dest === 'top') {
         toValue = 0;
-        newPosition = 'top';
+        modalPosition.value = 'top';
       } else if (snapPoints && snapPoints.length > 0) {
         toValue = availableScreenHeight - snapPoints[0]; // Use first snap point for initial open
-        newPosition = 'initial';
+        modalPosition.value = 'initial';
       } else {
         toValue = 0;
-        newPosition = 'top';
+        modalPosition.value = 'top';
       }
 
-      // Set animation state to prevent double animations
-      runOnJS(setIsAnimating)(true);
-      runOnJS(setIsVisible)(true);
-      runOnJS(setShowContent)(true);
+      runOnJS(handleWillOpenOnJS)();
 
-      // Animate overlay
       overlay.value = withTiming(1, {
         duration: timing.duration,
         easing: ReanimatedEasing.ease,
       });
 
-      // Animate translateY
-      const translateYAnimation = withTiming(toValue, {
-        duration: timing.duration,
-        easing: ReanimatedEasing.out(ReanimatedEasing.ease),
-      });
-
-      animiatedTranslateY.value = translateYAnimation;
-
-      // Use runOnJS to handle the completion callback
-      if (onDidOpen) {
-        runOnJS(onDidOpen)();
-      }
-
-      modalPosition.value = newPosition;
-
-      if (onPositionChange) {
-        runOnJS(onPositionChange)(newPosition);
-      }
-
-      // Reset animation state after animation completes
-      setTimeout(() => {
-        runOnJS(setIsAnimating)(false);
-      }, timing.duration);
+      animiatedTranslateY.value = withTiming(
+        toValue,
+        {
+          duration: timing.duration,
+          easing: ReanimatedEasing.out(ReanimatedEasing.ease),
+        },
+        finished => {
+          'worklet';
+          if (finished) {
+            runOnJS(handleDidOpenOnJS)();
+          }
+        },
+      );
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [openAnimationConfig, snapPoints, availableScreenHeight, onDidOpen, onPositionChange],
+    [openAnimationConfig, snapPoints, availableScreenHeight, onDidOpen],
   );
 
   const handleContentLayout = useCallback(
@@ -322,8 +322,6 @@ const ModalizeBase = (props: IProps, ref: React.Ref<IHandles>) => {
 
     // Start with external pan gesture if provided, otherwise create new one
     const baseGesture = externalPanGesture ?? Gesture.Pan();
-
-    console.log('baseGesture', baseGesture);
 
     return baseGesture
       .shouldCancelWhenOutside(false)
@@ -386,16 +384,14 @@ const ModalizeBase = (props: IProps, ref: React.Ref<IHandles>) => {
 
           if (nearestSnap >= maxHeight) {
             willCloseModalize = true;
-            runOnJS(setInternalIsOpen)(false);
-            handleAnimateClose();
+            handleAnimateCloseOnUI();
           } else {
             // Snap to snap point or full open - don't close
             willCloseModalize = false;
           }
         } else if (closeThreshold && !cancelClose) {
           willCloseModalize = true;
-          runOnJS(setInternalIsOpen)(false);
-          handleAnimateClose();
+          handleAnimateCloseOnUI();
         }
 
         if (willCloseModalize) {
@@ -435,7 +431,7 @@ const ModalizeBase = (props: IProps, ref: React.Ref<IHandles>) => {
     dragToss,
     snaps,
     availableScreenHeight,
-    handleAnimateClose,
+    handleAnimateCloseOnUI,
     onPositionChange,
     getKeyboardAwareSnaps,
   ]);
@@ -450,11 +446,11 @@ const ModalizeBase = (props: IProps, ref: React.Ref<IHandles>) => {
           if (onOverlayPress) {
             runOnJS(onOverlayPress)();
           }
-          runOnJS(setInternalIsOpen)(false);
-          handleAnimateClose();
+
+          handleAnimateCloseOnUI();
         })
         .requireExternalGestureToFail(panGestureModalize),
-    [closeOnOverlayTap, onOverlayPress, handleAnimateClose, panGestureModalize],
+    [closeOnOverlayTap, onOverlayPress, handleAnimateCloseOnUI, panGestureModalize],
   );
 
   // Separate gesture detectors:
@@ -470,12 +466,7 @@ const ModalizeBase = (props: IProps, ref: React.Ref<IHandles>) => {
           return;
         }
 
-        if (onWillOpen) {
-          onWillOpen();
-        }
-
-        setInternalIsOpen(true);
-        handleAnimateOpen(dest);
+        handleAnimateOpenOnUI(dest);
       },
 
       close() {
@@ -484,11 +475,10 @@ const ModalizeBase = (props: IProps, ref: React.Ref<IHandles>) => {
           return;
         }
 
-        setInternalIsOpen(false);
-        runOnUI(handleAnimateClose)();
+        handleAnimateCloseOnUI();
       },
     }),
-    [isAnimating, onWillOpen, handleAnimateOpen, handleAnimateClose],
+    [isAnimating, handleAnimateOpenOnUI, handleAnimateCloseOnUI],
   );
 
   React.useEffect(() => {
@@ -498,11 +488,11 @@ const ModalizeBase = (props: IProps, ref: React.Ref<IHandles>) => {
     }
 
     if (isOpen && !isVisible) {
-      handleAnimateOpen();
+      handleAnimateOpenOnUI();
     } else if (!isOpen && isVisible) {
-      handleAnimateClose();
+      handleAnimateCloseOnUI();
     }
-  }, [isOpen, isVisible, isAnimating, handleAnimateOpen, handleAnimateClose]);
+  }, [isOpen, isVisible, isAnimating, handleAnimateOpenOnUI, handleAnimateCloseOnUI]);
 
   // Manage back button listener based on visibility
   React.useEffect(() => {
