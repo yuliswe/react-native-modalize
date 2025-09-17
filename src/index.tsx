@@ -46,7 +46,7 @@ const DEFAULT_MODAL_TOP_OFFSET = Platform.select({
   default: 0,
 });
 
-const ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>) => {
+const ModalizeBase = (props: IProps, ref: React.Ref<IHandles>) => {
   // eslint-disable-next-line @typescript-eslint/unbound-method
   const {
     testID,
@@ -165,7 +165,7 @@ const ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>) => {
     setInternalIsOpen(false);
     setIsAnimating(false);
     onDidClose?.();
-  }, []);
+  }, [onDidClose]);
 
   const handleAnimateClose = useCallback((): void => {
     'worklet';
@@ -433,7 +433,7 @@ const ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>) => {
   React.useImperativeHandle(
     ref,
     () => ({
-      open(dest?: TOpen): void {
+      open(dest?: TOpen) {
         // Prevent opening if already animating
         if (isAnimating) {
           return;
@@ -447,7 +447,7 @@ const ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>) => {
         handleAnimateOpen(dest);
       },
 
-      close(): void {
+      close() {
         // Prevent closing if already animating
         if (isAnimating) {
           return;
@@ -579,5 +579,4 @@ export const Modalize = React.memo(React.forwardRef(ModalizeBase));
 export * from './utils/use-modalize';
 
 export type { HandleProps } from './components/Handle';
-export type { HeaderAndFooterProps } from './components/HeaderAndFooter';
 export type { OverlayProps } from './components/Overlay';
