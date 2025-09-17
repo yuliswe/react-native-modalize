@@ -18,7 +18,6 @@ import Animated, {
   runOnJS,
   runOnUI,
   useAnimatedStyle,
-  useDerivedValue,
   useSharedValue,
   withTiming,
 } from 'react-native-reanimated';
@@ -133,9 +132,13 @@ const ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>) => {
   // Initialize lastSnap based on snap points
   React.useEffect(() => {
     if (snapPoints && snapPoints.length > 0) {
-      lastSnap.value = availableScreenHeight - snapPoints[0];
+      runOnUI(() => {
+        'worklet';
+        lastSnap.value = availableScreenHeight - snapPoints[0];
+      })();
     }
-  }, [snapPoints, availableScreenHeight, lastSnap]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [snapPoints, availableScreenHeight]);
 
   // JS thread states - optimized with useMemo for initial values
   const [isVisible, setIsVisible] = React.useState(false);
@@ -159,12 +162,7 @@ const ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>) => {
   // Use external if provided, otherwise use internal
   const animiatedTranslateY = externalTranslateY || internalTranslateY;
 
-  // Optimized calculation with minimal type conversions and cached values
-  const finalTranslateY = useDerivedValue(() => {
-    const baseValue = animiatedTranslateY.value + dragY.value;
-    const unclamped = baseValue * cancelTranslateY.value;
-    return Math.max(0, Math.min(availableScreenHeight, unclamped));
-  });
+  // Calculation moved to useAnimatedStyle to avoid render-time shared value access
 
   const handleAnimateClose = useCallback((): void => {
     'worklet';
@@ -216,19 +214,8 @@ const ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>) => {
         }
       },
     );
-  }, [
-    closeAnimationConfig,
-    snapPoints,
-    snaps,
-    screenHeight,
-    onDidClose,
-    cancelTranslateY,
-    dragY,
-    lastSnap,
-    onWillClose,
-    overlay,
-    animiatedTranslateY,
-  ]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [closeAnimationConfig, snapPoints, snaps, screenHeight, onDidClose, onWillClose]);
 
   const handleBackPress = useCallback((): boolean => {
     if (onBackButtonPress) {
@@ -296,15 +283,7 @@ const ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>) => {
       }, timing.duration);
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [
-      openAnimationConfig,
-      snapPoints,
-      availableScreenHeight,
-      onDidOpen,
-      onPositionChange,
-      modalPosition,
-      overlay,
-    ],
+    [openAnimationConfig, snapPoints, availableScreenHeight, onDidOpen, onPositionChange],
   );
 
   const handleContentLayout = useCallback(
@@ -511,7 +490,10 @@ const ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>) => {
   }, [isVisible, handleBackPress]);
 
   const animatedStyle = useAnimatedStyle(() => {
-    return { transform: [{ translateY: finalTranslateY.value }] };
+    const baseValue = animiatedTranslateY.value + dragY.value;
+    const unclamped = baseValue * cancelTranslateY.value;
+    const clampedValue = Math.max(0, Math.min(availableScreenHeight, unclamped));
+    return { transform: [{ translateY: clampedValue }] };
   });
 
   const animatedViewStyle = React.useMemo(() => {
