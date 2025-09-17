@@ -27,6 +27,7 @@ import { IHandles, IProps, TOpen, TPosition } from './options';
 import s from './styles';
 import { LayoutEvent, PanGestureEvent, PanGestureStateEvent } from './types';
 import { useDimensions } from './utils/use-dimensions';
+import { useKeyboardHeight } from './utils/useKeyboardHeight';
 
 // Removed SCROLL_THRESHOLD as it's no longer needed with the new snap logic
 const USE_NATIVE_DRIVER = true;
@@ -97,7 +98,7 @@ const ModalizeBase = (props: IProps, ref: React.Ref<IHandles>) => {
   } = props;
 
   const { height: screenHeight } = useDimensions();
-
+  const { keyboardHeight, isKeyboardVisible } = useKeyboardHeight();
   /** Height available for the modal after accounting for top offset (status bar, etc.) */
   const availableScreenHeight = screenHeight - modalTopOffset;
 
@@ -118,6 +119,27 @@ const ModalizeBase = (props: IProps, ref: React.Ref<IHandles>) => {
     // Use Set for deduplication, then convert back to sorted array
     const uniqueSnaps = new Set([0, ...snapDistances, availableScreenHeight]);
     return Array.from(uniqueSnaps).sort((a, b) => a - b);
+  }, [snapPoints, availableScreenHeight]);
+
+  /** Function to calculate keyboard-aware snap points */
+  const getKeyboardAwareSnaps = React.useCallback(() => {
+    'worklet';
+    if (!snapPoints || snapPoints.length === 0) {
+      const keyboardAdjustedHeight = availableScreenHeight - keyboardHeight.value;
+      return [0, Math.max(0, keyboardAdjustedHeight)];
+    }
+
+    const snapDistances = new Array(snapPoints.length);
+    for (let i = 0; i < snapPoints.length; i++) {
+      // Adjust snap points to account for keyboard height
+      const adjustedHeight = Math.max(snapPoints[i], keyboardHeight.value + 60); // 60px padding above keyboard
+      snapDistances[i] = availableScreenHeight - adjustedHeight;
+    }
+
+    const keyboardAdjustedHeight = availableScreenHeight - keyboardHeight.value;
+    const uniqueSnaps = new Set([0, ...snapDistances, Math.max(0, keyboardAdjustedHeight)]);
+    return Array.from(uniqueSnaps).sort((a, b) => a - b);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [snapPoints, availableScreenHeight]);
 
   const [_actualModalHeight, setActualModalHeight] = React.useState<number | undefined>(undefined);
@@ -337,13 +359,16 @@ const ModalizeBase = (props: IProps, ref: React.Ref<IHandles>) => {
         if (snapPoints) {
           const endOffsetY = lastSnap.value + toValue + dragToss * velocityY;
 
+          // Use keyboard-aware snap points for better UX when keyboard is visible
+          const currentSnaps = isKeyboardVisible.value ? getKeyboardAwareSnaps() : snaps;
+
           // Find the nearest snap point with optimized search
-          let nearestSnap = snaps[0];
-          let minDistance = Math.abs(snaps[0] - endOffsetY);
+          let nearestSnap = currentSnaps[0];
+          let minDistance = Math.abs(currentSnaps[0] - endOffsetY);
 
           // Use for loop instead of forEach for better performance
-          for (let i = 1; i < snaps.length; i++) {
-            const snap = snaps[i];
+          for (let i = 1; i < currentSnaps.length; i++) {
+            const snap = currentSnaps[i];
             const distFromSnap = Math.abs(snap - endOffsetY);
 
             if (distFromSnap < minDistance) {
@@ -354,7 +379,12 @@ const ModalizeBase = (props: IProps, ref: React.Ref<IHandles>) => {
 
           destSnapPoint = nearestSnap;
 
-          if (nearestSnap === availableScreenHeight) {
+          // Determine if we should close based on keyboard-aware height
+          const maxHeight = isKeyboardVisible.value
+            ? Math.max(0, availableScreenHeight - keyboardHeight.value)
+            : availableScreenHeight;
+
+          if (nearestSnap >= maxHeight) {
             willCloseModalize = true;
             runOnJS(setInternalIsOpen)(false);
             handleAnimateClose();
@@ -407,6 +437,7 @@ const ModalizeBase = (props: IProps, ref: React.Ref<IHandles>) => {
     availableScreenHeight,
     handleAnimateClose,
     onPositionChange,
+    getKeyboardAwareSnaps,
   ]);
 
   const tapGestureOverlay = React.useMemo(
@@ -487,14 +518,28 @@ const ModalizeBase = (props: IProps, ref: React.Ref<IHandles>) => {
   }, [isVisible, handleBackPress]);
 
   const animatedStyle = useAnimatedStyle(() => {
-    const baseValue = animiatedTranslateY.value + dragY.value;
-    const unclamped = baseValue * cancelTranslateY.value;
-    const clampedValue = Math.max(0, Math.min(availableScreenHeight, unclamped));
+    // Calculate the base translateY value
+    const baseTranslateY = animiatedTranslateY.value + dragY.value;
+
+    // Apply keyboard avoidance - subtract keyboard height to move modal up
+    const keyboardAdjustedValue = baseTranslateY - keyboardHeight.value;
+
+    // Apply cancellation factor for animations
+    const unclamped = keyboardAdjustedValue * cancelTranslateY.value;
+
+    // Clamp the value to ensure the modal stays within screen bounds
+    // Allow negative values when keyboard pushes modal up beyond screen top
+    const clampedValue = Math.max(
+      -keyboardHeight.value,
+      Math.min(availableScreenHeight, unclamped),
+    );
+
     if (externalTranslateY) {
       externalTranslateY.value = 1 - clampedValue / availableScreenHeight;
     }
+
     return { transform: [{ translateY: clampedValue }] };
-  });
+  }, [availableScreenHeight]);
 
   const animatedViewStyle = React.useMemo(() => {
     return [
