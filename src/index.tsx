@@ -64,7 +64,7 @@ const ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>) => {
     // Layout
     snapPoints,
     modalTopOffset = DEFAULT_MODAL_TOP_OFFSET,
-    isOpen,
+    isOpen: externalIsOpen,
 
     // Options
     handlePosition = 'outside',
@@ -145,7 +145,7 @@ const ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>) => {
   const [showContent, setShowContent] = React.useState(true);
 
   const [internalIsOpen, setInternalIsOpen] = React.useState(true);
-  const currentIsOpen = isOpen !== undefined ? isOpen : internalIsOpen;
+  const isOpen = externalIsOpen ?? internalIsOpen;
 
   const [cancelClose, setCancelClose] = React.useState(false);
 
@@ -158,6 +158,14 @@ const ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>) => {
 
   // Always create internal translateY
   const animiatedTranslateY = useSharedValue(screenHeight);
+
+  const handleDidCloseOnJS = useCallback(() => {
+    setShowContent(false);
+    setIsVisible(false);
+    setInternalIsOpen(false);
+    setIsAnimating(false);
+    onDidClose?.();
+  }, []);
 
   const handleAnimateClose = useCallback((): void => {
     'worklet';
@@ -196,16 +204,8 @@ const ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>) => {
       finished => {
         'worklet';
         if (finished) {
-          // Run these only after animation finishes
-          runOnJS(setShowContent)(false);
           lastSnap.value = snapPoints ? snaps[1] : 80;
-          runOnJS(setIsVisible)(false);
-          runOnJS(setInternalIsOpen)(false);
-          runOnJS(setIsAnimating)(false);
-
-          if (onDidClose) {
-            runOnJS(onDidClose)();
-          }
+          runOnJS(handleDidCloseOnJS)();
         }
       },
     );
@@ -466,12 +466,12 @@ const ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>) => {
       return;
     }
 
-    if (currentIsOpen && !isVisible) {
+    if (isOpen && !isVisible) {
       handleAnimateOpen();
-    } else if (!currentIsOpen && isVisible) {
+    } else if (!isOpen && isVisible) {
       handleAnimateClose();
     }
-  }, [currentIsOpen, isVisible, isAnimating, handleAnimateOpen, handleAnimateClose]);
+  }, [isOpen, isVisible, isAnimating, handleAnimateOpen, handleAnimateClose]);
 
   // Manage back button listener based on visibility
   React.useEffect(() => {
