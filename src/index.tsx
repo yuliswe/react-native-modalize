@@ -157,12 +157,7 @@ const ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>) => {
   const dragY = useSharedValue(0);
 
   // Always create internal translateY
-  const internalTranslateY = useSharedValue(screenHeight);
-
-  // Use external if provided, otherwise use internal
-  const animiatedTranslateY = externalTranslateY || internalTranslateY;
-
-  // Calculation moved to useAnimatedStyle to avoid render-time shared value access
+  const animiatedTranslateY = useSharedValue(screenHeight);
 
   const handleAnimateClose = useCallback((): void => {
     'worklet';
@@ -304,7 +299,9 @@ const ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>) => {
     let willCloseModalize = false;
 
     // Start with external pan gesture if provided, otherwise create new one
-    const baseGesture = externalPanGesture || Gesture.Pan();
+    const baseGesture = externalPanGesture ?? Gesture.Pan();
+
+    console.log('baseGesture', baseGesture);
 
     return baseGesture
       .shouldCancelWhenOutside(false)
@@ -493,6 +490,9 @@ const ModalizeBase = (props: IProps, ref: React.Ref<React.ReactNode>) => {
     const baseValue = animiatedTranslateY.value + dragY.value;
     const unclamped = baseValue * cancelTranslateY.value;
     const clampedValue = Math.max(0, Math.min(availableScreenHeight, unclamped));
+    if (externalTranslateY) {
+      externalTranslateY.value = 1 - clampedValue / availableScreenHeight;
+    }
     return { transform: [{ translateY: clampedValue }] };
   });
 

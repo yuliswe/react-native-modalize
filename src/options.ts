@@ -151,9 +151,7 @@ export interface IProps<ListItem = any> {
   velocity?: number | undefined;
 
   /**
-   * External SharedValue to control the modal's translateY position in pixels.
-   * If provided, this will be used directly instead of the internal translateY.
-   * Range: 0 (top) to screenHeight (closed)
+   * Range: 0 (closed) to 1 (top)
    */
   translateY?: { value: number };
 
