@@ -6,10 +6,12 @@ import { isWeb } from './utils/devices';
 const { height } = Dimensions.get('window');
 
 export default StyleSheet.create({
-  content__adjustHeight: {
+  childrenStyle: {
     flex: isWeb ? 1 : 0,
     flexGrow: isWeb ? undefined : 0,
     flexShrink: isWeb ? undefined : 1,
+    // The absolute position allows the child content to be freely laid out
+    position: 'absolute',
   },
 
   content__container: {
@@ -50,16 +52,7 @@ export default StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.1)',
   },
 
-  modalize: {
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
-    right: 0,
-    top: 0,
-    zIndex: 9998,
-  },
-
-  modalize__content: {
+  modalStyle: {
     backgroundColor: '#fff',
 
     borderTopLeftRadius: 12,
@@ -73,6 +66,15 @@ export default StyleSheet.create({
     shadowRadius: 12,
 
     zIndex: 5,
+  },
+
+  modalize: {
+    bottom: 0,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    zIndex: 9998,
   },
 
   modalize__wrapper: {

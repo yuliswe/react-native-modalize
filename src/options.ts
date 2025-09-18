@@ -1,11 +1,11 @@
 import * as React from 'react';
-import { ViewStyle, EasingFunction, SectionList, StyleProp, ModalProps } from 'react-native';
+import { ViewStyle, SectionList, StyleProp, ModalProps } from 'react-native';
 import {
   ScrollView as RNGHScrollView,
   FlatList as RNGHFlatList,
   type PanGesture,
 } from 'react-native-gesture-handler';
-
+import { EasingFunction } from 'react-native-reanimated';
 import { LayoutEvent } from './types';
 
 export type TOpen = 'default' | 'top';
@@ -27,11 +27,6 @@ export interface ISpringProps {
   stiffness?: number;
   damping?: number;
   mass?: number;
-}
-
-export interface IConfigProps {
-  timing: ITimingProps;
-  spring?: ISpringProps;
 }
 
 export interface IProps<ListItem = any> {
@@ -113,24 +108,46 @@ export interface IProps<ListItem = any> {
   closeOnOverlayTap?: boolean;
 
   /**
-   * Object to change the open animations.
-   * @default
-   * {
-   * timing: { duration: 280 },
-   * spring: { speed: 14, bounciness: 5 }
-   * }
+   * Duration of the open animation.
+   * @default 280
    */
-  openAnimationConfig?: IConfigProps;
+  openAnimationDuration?: number;
 
   /**
-   * Object to change the close animations.
-   * @default
-   * {
-   * timing: { duration: 280 },
-   * spring: { speed: 14, bounciness: 5 }
-   * }
+   * Easing function for the open animation.
    */
-  closeAnimationConfig?: IConfigProps;
+  openAnimationEasing?: EasingFunction;
+
+  /**
+   * Delay before starting the open animation.
+   */
+  openAnimationDelay?: number;
+
+  /**
+   * Whether the open animation is an interaction.
+   */
+  openAnimationIsInteraction?: boolean;
+
+  /**
+   * Duration of the close animation.
+   * @default 280
+   */
+  closeAnimationDuration?: number;
+
+  /**
+   * Easing function for the close animation.
+   */
+  closeAnimationEasing?: EasingFunction;
+
+  /**
+   * Delay before starting the close animation.
+   */
+  closeAnimationDelay?: number;
+
+  /**
+   * Whether the close animation is an interaction.
+   */
+  closeAnimationIsInteraction?: boolean;
 
   /**
    * A number that determines the momentum of the scroll required.
@@ -192,6 +209,32 @@ export interface IProps<ListItem = any> {
    * @default false
    */
   avoidKeyboard?: boolean;
+
+  /**
+   * Enable overdrag animation that allows the modal to be dragged beyond its normal bounds
+   * with resistance, and then bounce back when released.
+   * @default false
+   */
+  enableOverdrag?: boolean;
+
+  /**
+   * Controls the resistance when dragging beyond normal bounds.
+   * Higher values mean more resistance (less movement).
+   * @default 0.05
+   */
+  overdragResistance?: number;
+
+  /**
+   * Duration of the bounce back animation when releasing from overdrag.
+   * @default 400
+   */
+  overdragBounceDuration?: number;
+
+  /**
+   * Easing curve for the bounce back animation when releasing from overdrag.
+   * @default 'easeOut'
+   */
+  overdragBounceEasing?: 'ease' | 'linear' | 'easeIn' | 'easeOut' | 'easeInOut';
 
   /**
    * A header component outside of the ScrollView, on top of the modal.
