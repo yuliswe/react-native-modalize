@@ -186,6 +186,14 @@ export interface IProps<ListItem = any> {
   withOverlay?: boolean;
 
   /**
+   * Enable keyboard avoiding behavior for the modal.
+   * When enabled, the modal will automatically adjust its position and snap points
+   * to avoid being covered by the keyboard.
+   * @default false
+   */
+  avoidKeyboard?: boolean;
+
+  /**
    * A header component outside of the ScrollView, on top of the modal.
    */
   HeaderComponent?: React.ReactNode;

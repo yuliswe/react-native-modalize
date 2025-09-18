@@ -18,13 +18,14 @@ import Animated, {
   runOnJS,
   runOnUI,
   useAnimatedStyle,
+  useDerivedValue,
   useSharedValue,
   withTiming,
 } from 'react-native-reanimated';
 import { Handle } from './components/Handle';
 import { Overlay } from './components/Overlay';
 import { IHandles, IProps, TOpen, TPosition } from './options';
-import s from './styles';
+import { default as s } from './styles';
 import { LayoutEvent, PanGestureEvent, PanGestureStateEvent } from './types';
 import { useDimensions } from './utils/use-dimensions';
 import { useKeyboardHeight } from './utils/useKeyboardHeight';
@@ -85,6 +86,7 @@ const ModalizeBase = (props: IProps, ref: React.Ref<IHandles>) => {
     reactModalProps,
     withHandle = true,
     withOverlay = true,
+    avoidKeyboard = false,
 
     // Callbacks
     onWillOpen,
@@ -98,11 +100,27 @@ const ModalizeBase = (props: IProps, ref: React.Ref<IHandles>) => {
   } = props;
 
   const { height: screenHeight } = useDimensions();
-  const { keyboardHeight, isKeyboardVisible } = useKeyboardHeight();
+  const { keyboardHeight: rawKeyboardHeight, isKeyboardVisible: rawIsKeyboardVisible } =
+    useKeyboardHeight();
+
+  const avoidKeyboardShared = useSharedValue(avoidKeyboard);
+
+  React.useEffect(() => {
+    avoidKeyboardShared.value = avoidKeyboard;
+  }, [avoidKeyboard, avoidKeyboardShared]);
+
+  const keyboardHeight = useDerivedValue(() => {
+    'worklet';
+    return avoidKeyboardShared.value ? rawKeyboardHeight.value : 0;
+  }, [avoidKeyboardShared, rawKeyboardHeight]);
+
+  const isKeyboardVisible = useDerivedValue(() => {
+    'worklet';
+    return avoidKeyboardShared.value ? rawIsKeyboardVisible.value : false;
+  }, [avoidKeyboardShared, rawIsKeyboardVisible]);
+
   /** Height available for the modal after accounting for top offset (status bar, etc.) */
   const availableScreenHeight = screenHeight - modalTopOffset;
-
-  /** Initial height when modal opens (undefined if adjusting to content height) */
 
   /** Snap points: [closed, snapPoints..., fullOpen] or [closed, fullOpen] */
   const snaps = React.useMemo(() => {
@@ -140,7 +158,7 @@ const ModalizeBase = (props: IProps, ref: React.Ref<IHandles>) => {
     const uniqueSnaps = new Set([0, ...snapDistances, Math.max(0, keyboardAdjustedHeight)]);
     return Array.from(uniqueSnaps).sort((a, b) => a - b);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [snapPoints, availableScreenHeight]);
+  }, [snapPoints, availableScreenHeight, keyboardHeight]);
 
   const [_actualModalHeight, setActualModalHeight] = React.useState<number | undefined>(undefined);
 
@@ -309,9 +327,8 @@ const ModalizeBase = (props: IProps, ref: React.Ref<IHandles>) => {
         onLayout(event);
       }
 
-      const { height } = event.nativeEvent.layout;
-
-      return setActualModalHeight(height);
+      const { height: childrenHeight } = event.nativeEvent.layout;
+      return setActualModalHeight(childrenHeight);
     },
     [onLayout],
   );
@@ -434,6 +451,8 @@ const ModalizeBase = (props: IProps, ref: React.Ref<IHandles>) => {
     handleAnimateCloseOnUI,
     onPositionChange,
     getKeyboardAwareSnaps,
+    keyboardHeight,
+    isKeyboardVisible,
   ]);
 
   const tapGestureOverlay = React.useMemo(
@@ -557,18 +576,21 @@ const ModalizeBase = (props: IProps, ref: React.Ref<IHandles>) => {
             />
           </GestureDetector>
           {showContent && (
-            <Animated.View
-              style={animatedViewStyle}
-              testID="Modalize.ModalWrapper(Animated.View)"
-              onLayout={handleContentLayout}
-            >
-              <View style={modalStyle}>
+            <Animated.View style={animatedViewStyle} testID="Modalize.Content(Animated.View)">
+              <View
+                style={modalStyle}
+                onLayout={handleContentLayout}
+                testID="Modalize.Content.View"
+              >
                 <Handle
                   withHandle={withHandle}
                   handlePosition={handlePosition}
                   handleStyle={handleStyle}
                 />
-                <View style={[s.content__adjustHeight, childrenStyle]} testID="Modalize.Content">
+                <View
+                  style={[s.content__adjustHeight, childrenStyle]}
+                  testID="Modalize.Content.View.Children"
+                >
                   {children}
                 </View>
               </View>
