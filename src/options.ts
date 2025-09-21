@@ -232,9 +232,8 @@ export interface IProps<ListItem = any> {
 
   /**
    * Easing curve for the bounce back animation when releasing from overdrag.
-   * @default 'easeOut'
    */
-  overdragBounceEasing?: 'ease' | 'linear' | 'easeIn' | 'easeOut' | 'easeInOut';
+  overdragBounceEasing?: EasingFunction;
 
   /**
    * A header component outside of the ScrollView, on top of the modal.

@@ -37,9 +37,11 @@ const USE_NATIVE_DRIVER = true;
 const DEFAULT_OPEN_ANIMATION_DURATION = 280;
 const DEFAULT_CLOSE_ANIMATION_DURATION = 280;
 const DEFAULT_SNAP_ANIMATION_DURATION = 300;
+const DEFAULT_OVERDRAG_BOUNCE_DURATION = 400;
 const DEFAULT_OPEN_ANIMATION_EASING = Easing.out(Easing.ease);
 const DEFAULT_CLOSE_ANIMATION_EASING = Easing.ease;
 const DEFAULT_SNAP_ANIMATION_EASING = Easing.out(Easing.ease);
+const DEFAULT_OVERDRAG_BOUNCE_EASING = Easing.out(Easing.ease);
 
 const DEFAULT_MODAL_TOP_OFFSET = Platform.select({
   ios: 0,
@@ -119,7 +121,7 @@ const ModalizeBase = (props: IProps, ref: React.Ref<IHandles>) => {
     enableOverdrag = false,
     overdragResistance = 0.05,
     overdragBounceDuration = 400,
-    overdragBounceEasing = 'easeOut' as const,
+    overdragBounceEasing = DEFAULT_OVERDRAG_BOUNCE_EASING,
 
     // Callbacks
     onWillOpen,
@@ -486,7 +488,7 @@ const ModalizeBase = (props: IProps, ref: React.Ref<IHandles>) => {
 
             // Use bounce animation with spring physics for natural feel
             animiatedTranslateY.value = withSpring(bounceTarget, {
-              duration: overdragBounceDuration,
+              duration: DEFAULT_OVERDRAG_BOUNCE_DURATION,
               dampingRatio: 0.8,
               stiffness: 200,
             });
