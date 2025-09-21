@@ -19,7 +19,6 @@ import Animated, {
   useAnimatedStyle,
   useDerivedValue,
   useSharedValue,
-  withSpring,
   withTiming,
 } from 'react-native-reanimated';
 import { Handle } from './components/Handle';
@@ -37,7 +36,7 @@ const USE_NATIVE_DRIVER = true;
 const DEFAULT_OPEN_ANIMATION_DURATION = 280;
 const DEFAULT_CLOSE_ANIMATION_DURATION = 280;
 const DEFAULT_SNAP_ANIMATION_DURATION = 300;
-const DEFAULT_OVERDRAG_BOUNCE_DURATION = 400;
+const DEFAULT_OVERDRAG_BOUNCE_DURATION = 100;
 const DEFAULT_OPEN_ANIMATION_EASING = Easing.out(Easing.ease);
 const DEFAULT_CLOSE_ANIMATION_EASING = Easing.ease;
 const DEFAULT_SNAP_ANIMATION_EASING = Easing.out(Easing.ease);
@@ -149,51 +148,32 @@ const ModalizeBase = (props: IProps, ref: React.Ref<IHandles>) => {
     return avoidKeyboardShared.value ? rawKeyboardHeight.value : 0;
   }, [avoidKeyboardShared, rawKeyboardHeight]);
 
-  const isKeyboardVisible = useDerivedValue(() => {
-    'worklet';
-    return avoidKeyboardShared.value ? rawIsKeyboardVisible.value : false;
-  }, [avoidKeyboardShared, rawIsKeyboardVisible]);
-
   /** Height available for the modal after accounting for top offset (status bar, etc.) */
-  const availableScreenHeight = screenHeight - modalTopOffset;
+  const availableScreenHeight = useDerivedValue(() => {
+    'worklet';
+    return screenHeight - modalTopOffset - (avoidKeyboardShared.value ? keyboardHeight.value : 0);
+  }, [screenHeight, modalTopOffset]);
 
   /** Snap points: [closed, snapPoints..., fullOpen] or [closed, fullOpen] */
-  const snaps = React.useMemo(() => {
-    if (!snapPoints || snapPoints.length === 0) {
-      return [0, availableScreenHeight];
-    }
+  const snaps = React.useMemo(
+    () => {
+      if (!snapPoints || snapPoints.length === 0) {
+        return [0, availableScreenHeight.value];
+      }
 
-    // Pre-allocate array with known size to avoid dynamic resizing
-    const snapDistances = new Array(snapPoints.length);
-    for (let i = 0; i < snapPoints.length; i++) {
-      snapDistances[i] = availableScreenHeight - snapPoints[i];
-    }
+      // Pre-allocate array with known size to avoid dynamic resizing
+      const snapDistances = new Array(snapPoints.length);
+      for (let i = 0; i < snapPoints.length; i++) {
+        snapDistances[i] = availableScreenHeight.value - snapPoints[i];
+      }
 
-    // Use Set for deduplication, then convert back to sorted array
-    const uniqueSnaps = new Set([0, ...snapDistances, availableScreenHeight]);
-    return Array.from(uniqueSnaps).sort((a, b) => a - b);
-  }, [snapPoints, availableScreenHeight]);
-
-  /** Function to calculate keyboard-aware snap points */
-  const getKeyboardAwareSnaps = React.useCallback(() => {
-    'worklet';
-    if (!snapPoints || snapPoints.length === 0) {
-      const keyboardAdjustedHeight = availableScreenHeight - keyboardHeight.value;
-      return [0, Math.max(0, keyboardAdjustedHeight)];
-    }
-
-    const snapDistances = new Array(snapPoints.length);
-    for (let i = 0; i < snapPoints.length; i++) {
-      // Adjust snap points to account for keyboard height
-      const adjustedHeight = Math.max(snapPoints[i], keyboardHeight.value + 60); // 60px padding above keyboard
-      snapDistances[i] = availableScreenHeight - adjustedHeight;
-    }
-
-    const keyboardAdjustedHeight = availableScreenHeight - keyboardHeight.value;
-    const uniqueSnaps = new Set([0, ...snapDistances, Math.max(0, keyboardAdjustedHeight)]);
-    return Array.from(uniqueSnaps).sort((a, b) => a - b);
+      // Use Set for deduplication, then convert back to sorted array
+      const uniqueSnaps = new Set([0, ...snapDistances, availableScreenHeight.value]);
+      return Array.from(uniqueSnaps).sort((a, b) => a - b);
+    },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [snapPoints, availableScreenHeight, keyboardHeight]);
+    [snapPoints],
+  );
 
   /** Current actual height of the modal (can change based on content) */
 
@@ -206,7 +186,7 @@ const ModalizeBase = (props: IProps, ref: React.Ref<IHandles>) => {
     if (snapPoints && snapPoints.length > 0) {
       runOnUI(() => {
         'worklet';
-        lastSnap.value = availableScreenHeight - snapPoints[0];
+        lastSnap.value = availableScreenHeight.value - snapPoints[0];
       })();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -327,7 +307,7 @@ const ModalizeBase = (props: IProps, ref: React.Ref<IHandles>) => {
         toValue = 0;
         modalPosition.value = 'top';
       } else if (snapPoints && snapPoints.length > 0) {
-        toValue = availableScreenHeight - snapPoints[0]; // Use first snap point for initial open
+        toValue = availableScreenHeight.value - snapPoints[0]; // Use first snap point for initial open
         modalPosition.value = 'initial';
       } else {
         toValue = 0;
@@ -419,17 +399,13 @@ const ModalizeBase = (props: IProps, ref: React.Ref<IHandles>) => {
 
         if (snapPoints) {
           const endOffsetY = lastSnap.value + toValue + dragToss * velocityY;
-
-          // Use keyboard-aware snap points for better UX when keyboard is visible
-          const currentSnaps = isKeyboardVisible.value ? getKeyboardAwareSnaps() : snaps;
-
           // Find the nearest snap point with optimized search
-          let nearestSnap = currentSnaps[0];
-          let minDistance = Math.abs(currentSnaps[0] - endOffsetY);
+          let nearestSnap = snaps[0];
+          let minDistance = Math.abs(snaps[0] - endOffsetY);
 
           // Use for loop instead of forEach for better performance
-          for (let i = 1; i < currentSnaps.length; i++) {
-            const snap = currentSnaps[i];
+          for (let i = 1; i < snaps.length; i++) {
+            const snap = snaps[i];
             const distFromSnap = Math.abs(snap - endOffsetY);
 
             if (distFromSnap < minDistance) {
@@ -440,12 +416,7 @@ const ModalizeBase = (props: IProps, ref: React.Ref<IHandles>) => {
 
           destSnapPoint = nearestSnap;
 
-          // Determine if we should close based on keyboard-aware height
-          const maxHeight = isKeyboardVisible.value
-            ? Math.max(0, availableScreenHeight - keyboardHeight.value)
-            : availableScreenHeight;
-
-          if (nearestSnap >= maxHeight) {
+          if (nearestSnap >= availableScreenHeight.value) {
             willCloseModalize = true;
             handleAnimateCloseOnUI();
           } else {
@@ -466,47 +437,29 @@ const ModalizeBase = (props: IProps, ref: React.Ref<IHandles>) => {
         animiatedTranslateY.value = currentVisualPosition;
         dragY.value = 0;
 
-        // Check if we need to bounce back from overdrag
-        if (enableOverdrag) {
-          const topBound = isKeyboardVisible.value ? Math.max(0, -keyboardHeight.value) : 0;
-          const bottomBound = isKeyboardVisible.value
-            ? Math.max(0, availableScreenHeight - keyboardHeight.value)
-            : availableScreenHeight;
+        // If we're in overdrag territory, bounce back to nearest valid position
+        if (currentVisualPosition < 0) {
+          // Overdragged upward - bounce to top bound or closest snap point
+          const bounceTarget = snapPoints && destSnapPoint < 0 ? destSnapPoint : 0;
 
-          // If we're in overdrag territory, bounce back to nearest valid position
-          if (currentVisualPosition < topBound || currentVisualPosition > bottomBound) {
-            let bounceTarget: number;
+          // Use bounce animation with spring physics for natural feel
+          animiatedTranslateY.value = withTiming(bounceTarget, {
+            duration: DEFAULT_OVERDRAG_BOUNCE_DURATION,
+            easing: DEFAULT_OVERDRAG_BOUNCE_EASING,
+          });
 
-            if (currentVisualPosition < topBound) {
-              // Overdragged upward - bounce to top bound or closest snap point
-              bounceTarget = snapPoints && destSnapPoint < topBound ? destSnapPoint : topBound;
-            } else {
-              // Overdragged downward - bounce to bottom bound or closest snap point
-              bounceTarget =
-                snapPoints && destSnapPoint < bottomBound ? destSnapPoint : bottomBound;
-            }
+          lastSnap.value = bounceTarget;
 
-            // Use bounce animation with spring physics for natural feel
-            animiatedTranslateY.value = withSpring(bounceTarget, {
-              duration: DEFAULT_OVERDRAG_BOUNCE_DURATION,
-              dampingRatio: 0.8,
-              stiffness: 200,
-            });
-
-            lastSnap.value = bounceTarget;
-
-            const modalPositionValue = bounceTarget <= 0 ? 'top' : 'initial';
-            if (onPositionChange && modalPosition.value !== modalPositionValue) {
-              runOnJS(onPositionChange)(modalPositionValue);
-            }
-            if (modalPosition.value !== modalPositionValue) {
-              modalPosition.value = modalPositionValue;
-            }
-
-            return;
+          const modalPositionValue = bounceTarget <= 0 ? 'top' : 'initial';
+          if (onPositionChange && modalPosition.value !== modalPositionValue) {
+            runOnJS(onPositionChange)(modalPositionValue);
           }
-        }
+          if (modalPosition.value !== modalPositionValue) {
+            modalPosition.value = modalPositionValue;
+          }
 
+          return;
+        }
         // Update lastSnap to the destination snap point for next gesture
         lastSnap.value = destSnapPoint;
 
@@ -535,12 +488,8 @@ const ModalizeBase = (props: IProps, ref: React.Ref<IHandles>) => {
     cancelClose,
     dragToss,
     snaps,
-    availableScreenHeight,
     handleAnimateCloseOnUI,
     onPositionChange,
-    getKeyboardAwareSnaps,
-    keyboardHeight,
-    isKeyboardVisible,
     enableOverdrag,
     overdragResistance,
     overdragBounceDuration,
@@ -640,7 +589,6 @@ const ModalizeBase = (props: IProps, ref: React.Ref<IHandles>) => {
 
     // Calculate overdrag bounds
     const topBound = -keyboardHeight.value;
-    const bottomBound = availableScreenHeight;
 
     // Check if we're in overdrag territory
     if (draggedAndAnimiatedY < topBound) {
@@ -649,11 +597,6 @@ const ModalizeBase = (props: IProps, ref: React.Ref<IHandles>) => {
       const resistedOffset = calculateOverdragResistance(overdragOffset, overdragResistance);
       finalTranslateY = topBound; // Keep modal at top bound
       heightIncrease = Math.abs(resistedOffset); // Convert to positive height increase
-    } else if (draggedAndAnimiatedY > bottomBound) {
-      // Overdrag downward (below bottom bound) - keep original behavior
-      const overdragOffset = draggedAndAnimiatedY - bottomBound;
-      const resistedOffset = calculateOverdragResistance(overdragOffset, overdragResistance);
-      finalTranslateY = bottomBound + resistedOffset;
     } else {
       // Within normal bounds
       finalTranslateY = draggedAndAnimiatedY;
@@ -663,7 +606,7 @@ const ModalizeBase = (props: IProps, ref: React.Ref<IHandles>) => {
     overdragHeightIncr.value = heightIncrease;
 
     if (externalTranslateY) {
-      externalTranslateY.value = 1 - finalTranslateY / availableScreenHeight;
+      externalTranslateY.value = 1 - finalTranslateY / availableScreenHeight.value;
     }
 
     // console.log('finalTranslateY', finalTranslateY);
@@ -673,8 +616,9 @@ const ModalizeBase = (props: IProps, ref: React.Ref<IHandles>) => {
     return {
       transform: [{ translateY: finalTranslateY }],
       height:
-        (childContentHeight.value === null ? availableScreenHeight : childContentHeight.value) +
-        heightIncrease,
+        childContentHeight.value === null
+          ? availableScreenHeight.value
+          : Math.min(childContentHeight.value, availableScreenHeight.value) + heightIncrease,
     };
   }, []);
 
@@ -693,7 +637,7 @@ const ModalizeBase = (props: IProps, ref: React.Ref<IHandles>) => {
         props.childrenStyle,
         {
           width: screenWidth,
-          maxHeight: availableScreenHeight,
+          maxHeight: availableScreenHeight.value,
         },
       ];
     },
@@ -701,6 +645,9 @@ const ModalizeBase = (props: IProps, ref: React.Ref<IHandles>) => {
     [props.childrenStyle, screenWidth],
   );
 
+  // Make sure the children height is exactly the same as the modal height. Ie,
+  // only use padding in the children. Do not use margin. This is the only way
+  // to make the layout calculated correctly.
   const renderModalize = (
     <View style={[s.modalize, rootStyle]} pointerEvents={!withOverlay ? 'box-none' : 'auto'}>
       {/* GestureDetector for pan gestures - handles all swipe actions */}
