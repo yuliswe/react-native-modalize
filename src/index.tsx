@@ -693,6 +693,7 @@ const ModalizeBase = (props: IProps, ref: React.Ref<IHandles>) => {
         props.childrenStyle,
         {
           width: screenWidth,
+          maxHeight: availableScreenHeight,
         },
       ];
     },
