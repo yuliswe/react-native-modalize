@@ -297,6 +297,9 @@ Full Changelog: https://github.com/${repoOwner}/${repoName}/compare/v${version}.
     printStatus(
       `Release URL: https://github.com/${repoOwner}/${repoName}/releases/tag/v${version}`,
     );
+    printStatus(
+      `Download URL: https://github.com/${repoOwner}/${repoName}/releases/download/v${version}/${tgzFilename}`,
+    );
   } catch (error) {
     printError(`Release failed: ${(error as Error).message}`);
     process.exit(1);
