@@ -3,14 +3,7 @@
  * on snack.expo for some reason. Will revisit this later.
  */
 import React, { useCallback, useMemo } from 'react';
-import {
-  BackHandler,
-  Modal,
-  Platform,
-  StatusBar,
-  View,
-  type NativeEventSubscription,
-} from 'react-native';
+import { BackHandler, Modal, View, type NativeEventSubscription } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   Easing,
@@ -41,12 +34,6 @@ const DEFAULT_OPEN_ANIMATION_EASING = Easing.out(Easing.ease);
 const DEFAULT_CLOSE_ANIMATION_EASING = Easing.ease;
 const DEFAULT_SNAP_ANIMATION_EASING = Easing.out(Easing.ease);
 const DEFAULT_OVERDRAG_BOUNCE_EASING = Easing.out(Easing.ease);
-
-const DEFAULT_MODAL_TOP_OFFSET = Platform.select({
-  ios: 0,
-  android: StatusBar.currentHeight || 0,
-  default: 0,
-});
 
 /**
  * Calculate overdrag resistance effect.
@@ -87,7 +74,7 @@ const ModalizeBase = (props: IProps, ref: React.Ref<IHandles>) => {
 
     // Layout
     snapPoints,
-    modalTopOffset = DEFAULT_MODAL_TOP_OFFSET,
+    modalTopOffset = 0,
     isOpen: externalIsOpen,
 
     // Options
