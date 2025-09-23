@@ -1,5 +1,5 @@
 import { Keyboard, KeyboardEvent, Platform } from 'react-native';
-import { useEffect } from 'react';
+import { useCallback, useEffect } from 'react';
 import { useSharedValue, withTiming, Easing } from 'react-native-reanimated';
 
 export interface UseKeyboardHeightReturn {
@@ -11,32 +11,32 @@ export function useKeyboardHeight(): UseKeyboardHeightReturn {
   const keyboardHeight = useSharedValue(0);
   const isKeyboardVisible = useSharedValue(false);
 
+  const onKeyboardShow = useCallback((event: KeyboardEvent) => {
+    'worklet';
+    const height = event.endCoordinates.height;
+
+    // Animate keyboard height change for smoother transitions
+    keyboardHeight.value = withTiming(height, {
+      duration: Platform.OS === 'ios' ? 200 : 200,
+      easing: Easing.out(Easing.ease),
+    });
+
+    isKeyboardVisible.value = true;
+  }, []);
+
+  const onKeyboardHide = useCallback(() => {
+    'worklet';
+
+    // Animate keyboard height change for smoother transitions
+    keyboardHeight.value = withTiming(0, {
+      duration: Platform.OS === 'ios' ? 200 : 200,
+      easing: Easing.out(Easing.ease),
+    });
+
+    isKeyboardVisible.value = false;
+  }, []);
+
   useEffect(() => {
-    const onKeyboardShow = (event: KeyboardEvent) => {
-      'worklet';
-      const height = event.endCoordinates.height;
-
-      // Animate keyboard height change for smoother transitions
-      keyboardHeight.value = withTiming(height, {
-        duration: Platform.OS === 'ios' ? 250 : 200,
-        easing: Easing.out(Easing.ease),
-      });
-
-      isKeyboardVisible.value = true;
-    };
-
-    const onKeyboardHide = () => {
-      'worklet';
-
-      // Animate keyboard height change for smoother transitions
-      keyboardHeight.value = withTiming(0, {
-        duration: Platform.OS === 'ios' ? 250 : 200,
-        easing: Easing.out(Easing.ease),
-      });
-
-      isKeyboardVisible.value = false;
-    };
-
     // Use different events for iOS vs Android for better performance
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
     const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
@@ -48,7 +48,7 @@ export function useKeyboardHeight(): UseKeyboardHeightReturn {
       showSub.remove();
       hideSub.remove();
     };
-  }, [keyboardHeight, isKeyboardVisible]);
+  }, [onKeyboardShow, onKeyboardHide]);
 
   return { keyboardHeight, isKeyboardVisible };
 }

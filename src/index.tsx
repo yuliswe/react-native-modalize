@@ -566,8 +566,7 @@ const ModalizeBase = (props: IProps, ref: React.Ref<IHandles>) => {
     }
 
     // Calculate the base translateY value
-    const draggedAndAnimiatedY =
-      (animiatedTranslateY.value + dragY.value - keyboardHeight.value) * cancelTranslateY.value;
+    const draggedAndAnimiatedY = (animiatedTranslateY.value + dragY.value) * cancelTranslateY.value;
 
     // console.log('draggedAndAnimiatedY', draggedAndAnimiatedY);
 
@@ -605,7 +604,8 @@ const ModalizeBase = (props: IProps, ref: React.Ref<IHandles>) => {
       height:
         childContentHeight.value === null
           ? availableScreenHeight.value
-          : Math.min(childContentHeight.value, availableScreenHeight.value) + heightIncrease,
+          : Math.min(childContentHeight.value + keyboardHeight.value, screenHeight) +
+            heightIncrease,
     };
   }, []);
 
