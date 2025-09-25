@@ -640,15 +640,17 @@ const ModalizeBase = (props: IProps, ref: React.Ref<IHandles>) => {
       {/* GestureDetector for pan gestures - handles all swipe actions */}
       <GestureDetector gesture={panGestureModalize}>
         <View style={s.modalize__wrapper} pointerEvents="box-none">
-          <GestureDetector gesture={tapGestureOverlay}>
-            <Overlay
-              withOverlay={withOverlay}
-              modalPosition={modalPosition}
-              showContent={showContent}
-              overlayStyle={overlayStyle}
-              overlay={overlay}
-            />
-          </GestureDetector>
+          {withOverlay && (
+            <GestureDetector gesture={tapGestureOverlay}>
+              <Overlay
+                withOverlay={withOverlay}
+                modalPosition={modalPosition}
+                showContent={showContent}
+                overlayStyle={overlayStyle}
+                overlay={overlay}
+              />
+            </GestureDetector>
+          )}
           {showContent && (
             <Animated.View style={modalStyle} testID="Modalize.Content(Animated.View)">
               <Handle
