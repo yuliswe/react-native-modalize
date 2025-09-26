@@ -68,9 +68,18 @@ export interface IProps<ListItem = any> {
 
   /**
    * An array of numbers that will enable the snapping feature and create intermediate points before opening the modal to full screen.
-   * Each number represents the height of the modal at that snap point.
+   * Each number represents the percentage of modal child content height: 0 = completely closed, 1 = completely open.
+   * For example, [0.3, 0.7] means the modal can snap to 30% or 70% of its child content height.
+   * The snap points are calculated based on the actual height of the modal's content, not the screen height.
    */
   snapPoints?: number[];
+
+  /**
+   * Index of the snap point to use as the initial position when the modal opens.
+   * If not provided, defaults to the first snap point (index 0).
+   * @default 0
+   */
+  initialSnapPoint?: number;
 
   /**
    * A number to define the modal's top offset.

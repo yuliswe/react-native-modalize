@@ -74,6 +74,7 @@ const ModalizeBase = (props: IProps, ref: React.Ref<IHandles>) => {
 
     // Layout
     snapPoints,
+    initialSnapPoint = 0,
     modalTopOffset = 0,
     isOpen: externalIsOpen,
 
@@ -141,43 +142,54 @@ const ModalizeBase = (props: IProps, ref: React.Ref<IHandles>) => {
     return screenHeight - modalTopOffset - (avoidKeyboardShared.value ? keyboardHeight.value : 0);
   }, [screenHeight, modalTopOffset]);
 
-  /** Snap points: [closed, snapPoints..., fullOpen] or [closed, fullOpen] */
-  const snaps = React.useMemo(
-    () => {
-      if (!snapPoints || snapPoints.length === 0) {
-        return [0, availableScreenHeight.value];
-      }
-
-      // Pre-allocate array with known size to avoid dynamic resizing
-      const snapDistances = new Array(snapPoints.length);
-      for (let i = 0; i < snapPoints.length; i++) {
-        snapDistances[i] = availableScreenHeight.value - snapPoints[i];
-      }
-
-      // Use Set for deduplication, then convert back to sorted array
-      const uniqueSnaps = new Set([0, ...snapDistances, availableScreenHeight.value]);
-      return Array.from(uniqueSnaps).sort((a, b) => a - b);
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [snapPoints],
-  );
-
-  /** Current actual height of the modal (can change based on content) */
-
   // UI thread only states - moved to shared values
   const lastSnap = useSharedValue(0);
   const modalPosition = useSharedValue<TPosition>('initial');
+  const childContentHeight = useSharedValue<number | null>(null);
+
+  /** Snap points: [closed, snapPoints..., fullOpen] or [closed, fullOpen] */
+  const snaps = useDerivedValue(() => {
+    'worklet';
+
+    if (!snapPoints || snapPoints.length === 0) {
+      return [0, availableScreenHeight.value];
+    }
+
+    // Use childContentHeight if available, otherwise fall back to availableScreenHeight
+    const contentHeight =
+      childContentHeight.value !== null ? childContentHeight.value : availableScreenHeight.value;
+
+    // Convert percentage-based snap points to actual distances
+    // snapPoints are percentages: 0 = closed, 1 = fully open
+    // actualDistance = contentHeight * (1 - percentage)
+    const snapDistances = snapPoints.map(percentage => contentHeight * (1 - percentage));
+
+    // Use Set for deduplication, then convert back to sorted array
+    const uniqueSnaps = new Set([0, ...snapDistances, contentHeight]);
+    return Array.from(uniqueSnaps).sort((a, b) => a - b);
+  }, [snapPoints, childContentHeight, availableScreenHeight]);
+
+  /** Current actual height of the modal (can change based on content) */
 
   // Initialize lastSnap based on snap points
   React.useEffect(() => {
     if (snapPoints && snapPoints.length > 0) {
       runOnUI(() => {
         'worklet';
-        lastSnap.value = availableScreenHeight.value - snapPoints[0];
+        const snapIndex = Math.min(initialSnapPoint, snapPoints.length - 1);
+        const percentage = snapPoints[snapIndex];
+
+        // Use childContentHeight if available, otherwise fall back to availableScreenHeight
+        const contentHeight =
+          childContentHeight.value !== null
+            ? childContentHeight.value
+            : availableScreenHeight.value;
+
+        lastSnap.value = contentHeight * (1 - percentage);
       })();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [snapPoints, availableScreenHeight]);
+  }, [snapPoints, initialSnapPoint, availableScreenHeight, childContentHeight]);
 
   // JS thread states - optimized with useMemo for initial values
   const [isVisible, setIsVisible] = React.useState(false);
@@ -195,7 +207,6 @@ const ModalizeBase = (props: IProps, ref: React.Ref<IHandles>) => {
   const overlay = useSharedValue(0);
   const dragY = useSharedValue(0);
   const overdragHeightIncr = useSharedValue(0); // Track height increase during overdrag
-  const childContentHeight = useSharedValue<number | null>(null);
   const animiatedTranslateY = useSharedValue(screenHeight);
 
   const handleWillCloseOnJS = useCallback(() => {
@@ -243,7 +254,13 @@ const ModalizeBase = (props: IProps, ref: React.Ref<IHandles>) => {
       finished => {
         'worklet';
         if (finished) {
-          lastSnap.value = snapPoints ? snaps[1] : 80;
+          // Use childContentHeight if available, otherwise fall back to availableScreenHeight
+          const contentHeight =
+            childContentHeight.value !== null
+              ? childContentHeight.value
+              : availableScreenHeight.value;
+
+          lastSnap.value = snapPoints ? contentHeight * (1 - snapPoints[0]) : 80;
           runOnJS(handleDidCloseOnJS)();
         }
       },
@@ -294,12 +311,24 @@ const ModalizeBase = (props: IProps, ref: React.Ref<IHandles>) => {
         toValue = 0;
         modalPosition.value = 'top';
       } else if (snapPoints && snapPoints.length > 0) {
-        toValue = availableScreenHeight.value - snapPoints[0]; // Use first snap point for initial open
+        const snapIndex = Math.min(initialSnapPoint, snapPoints.length - 1);
+        const percentage = snapPoints[snapIndex];
+
+        // Use childContentHeight if available, otherwise fall back to availableScreenHeight
+        const contentHeight =
+          childContentHeight.value !== null
+            ? childContentHeight.value
+            : availableScreenHeight.value;
+
+        toValue = contentHeight * (1 - percentage); // Convert percentage to actual distance
         modalPosition.value = 'initial';
       } else {
         toValue = 0;
         modalPosition.value = 'top';
       }
+
+      console.log('dest', dest);
+      console.log('toValue', toValue);
 
       runOnJS(handleWillOpenOnJS)();
 
@@ -329,6 +358,7 @@ const ModalizeBase = (props: IProps, ref: React.Ref<IHandles>) => {
       openAnimationDelay,
       openAnimationIsInteraction,
       snapPoints,
+      initialSnapPoint,
       availableScreenHeight,
       onDidOpen,
     ],
@@ -381,18 +411,21 @@ const ModalizeBase = (props: IProps, ref: React.Ref<IHandles>) => {
         const thresholdProps = translationY > threshold;
         const closeThreshold = velocity ? velocityY >= velocity || thresholdProps : thresholdProps;
 
-        const toValue = translationY;
         let destSnapPoint = lastSnap.value; // Start with current position
 
         if (snapPoints) {
-          const endOffsetY = lastSnap.value + toValue + dragToss * velocityY;
+          const endOffsetY = lastSnap.value + translationY + dragToss * velocityY;
+
+          // Get current snaps array
+          const currentSnaps = snaps.value;
+
           // Find the nearest snap point with optimized search
-          let nearestSnap = snaps[0];
-          let minDistance = Math.abs(snaps[0] - endOffsetY);
+          let nearestSnap = currentSnaps[0];
+          let minDistance = Math.abs(currentSnaps[0] - endOffsetY);
 
           // Use for loop instead of forEach for better performance
-          for (let i = 1; i < snaps.length; i++) {
-            const snap = snaps[i];
+          for (let i = 1; i < currentSnaps.length; i++) {
+            const snap = currentSnaps[i];
             const distFromSnap = Math.abs(snap - endOffsetY);
 
             if (distFromSnap < minDistance) {
@@ -403,7 +436,13 @@ const ModalizeBase = (props: IProps, ref: React.Ref<IHandles>) => {
 
           destSnapPoint = nearestSnap;
 
-          if (nearestSnap >= availableScreenHeight.value) {
+          // Use childContentHeight if available, otherwise fall back to availableScreenHeight
+          const contentHeight =
+            childContentHeight.value !== null
+              ? childContentHeight.value
+              : availableScreenHeight.value;
+
+          if (nearestSnap >= contentHeight) {
             willCloseModalize = true;
             handleAnimateCloseOnUI();
           } else {
@@ -449,6 +488,8 @@ const ModalizeBase = (props: IProps, ref: React.Ref<IHandles>) => {
         }
         // Update lastSnap to the destination snap point for next gesture
         lastSnap.value = destSnapPoint;
+
+        console.log('destSnapPoint', destSnapPoint);
 
         // Animate to destination snap point
         animiatedTranslateY.value = withTiming(destSnapPoint, {
