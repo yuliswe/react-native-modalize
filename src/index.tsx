@@ -73,7 +73,7 @@ const ModalizeBase = (props: IProps, ref: React.Ref<IHandles>) => {
     overlayStyle,
 
     // Layout
-    snapPoints,
+    snapPoints = [1, 0],
     initialSnapPoint = 0,
     modalTopOffset = 0,
     isOpen: externalIsOpen,
@@ -152,6 +152,8 @@ const ModalizeBase = (props: IProps, ref: React.Ref<IHandles>) => {
     'worklet';
 
     if (!snapPoints || snapPoints.length === 0) {
+      // Default to [1, 0] in percentage terms: 1 = open, 0 = closed
+      // This translates to distances: [0, contentHeight]
       return [0, availableScreenHeight.value];
     }
 
@@ -165,7 +167,7 @@ const ModalizeBase = (props: IProps, ref: React.Ref<IHandles>) => {
     const snapDistances = snapPoints.map(percentage => contentHeight * (1 - percentage));
 
     // Use Set for deduplication, then convert back to sorted array
-    const uniqueSnaps = new Set([0, ...snapDistances, contentHeight]);
+    const uniqueSnaps = new Set(snapDistances);
     return Array.from(uniqueSnaps).sort((a, b) => a - b);
   }, [snapPoints, childContentHeight, availableScreenHeight]);
 
@@ -408,50 +410,51 @@ const ModalizeBase = (props: IProps, ref: React.Ref<IHandles>) => {
 
         const { velocityY, translationY } = event;
         // Removed negativeReverseScroll as it's no longer needed with the new snap logic
-        const thresholdProps = translationY > threshold;
-        const closeThreshold = velocity ? velocityY >= velocity || thresholdProps : thresholdProps;
 
         let destSnapPoint = lastSnap.value; // Start with current position
 
-        if (snapPoints) {
-          const endOffsetY = lastSnap.value + translationY + dragToss * velocityY;
+        const endOffsetY = lastSnap.value + translationY + dragToss * velocityY;
 
-          // Get current snaps array
-          const currentSnaps = snaps.value;
+        // Get current snaps array (always available, defaults to [0, contentHeight] when no snapPoints)
+        const currentSnaps = snaps.value;
 
-          // Find the nearest snap point with optimized search
-          let nearestSnap = currentSnaps[0];
-          let minDistance = Math.abs(currentSnaps[0] - endOffsetY);
+        // Find the nearest snap point with optimized search
+        let nearestSnap = currentSnaps[0];
+        let minDistance = Math.abs(currentSnaps[0] - endOffsetY);
 
-          // Use for loop instead of forEach for better performance
-          for (let i = 1; i < currentSnaps.length; i++) {
-            const snap = currentSnaps[i];
-            const distFromSnap = Math.abs(snap - endOffsetY);
+        // Use for loop instead of forEach for better performance
+        for (let i = 1; i < currentSnaps.length; i++) {
+          const snap = currentSnaps[i];
+          const distFromSnap = Math.abs(snap - endOffsetY);
 
-            if (distFromSnap < minDistance) {
-              minDistance = distFromSnap;
-              nearestSnap = snap;
-            }
+          if (distFromSnap < minDistance) {
+            minDistance = distFromSnap;
+            nearestSnap = snap;
           }
+        }
 
-          destSnapPoint = nearestSnap;
+        destSnapPoint = nearestSnap;
 
-          // Use childContentHeight if available, otherwise fall back to availableScreenHeight
-          const contentHeight =
-            childContentHeight.value !== null
-              ? childContentHeight.value
-              : availableScreenHeight.value;
+        // Use childContentHeight if available, otherwise fall back to availableScreenHeight
+        const contentHeight =
+          childContentHeight.value !== null
+            ? childContentHeight.value
+            : availableScreenHeight.value;
 
-          if (nearestSnap >= contentHeight) {
+        if (nearestSnap >= contentHeight) {
+          // User tossed below the lowest snap point
+          if (props.alwaysOpen) {
+            destSnapPoint = currentSnaps[currentSnaps.length - 1]; // Lowest snap point
+            willCloseModalize = false;
+            console.log('destSnapPoint', destSnapPoint);
+          } else {
+            // Uncontrolled component - close the modal
             willCloseModalize = true;
             handleAnimateCloseOnUI();
-          } else {
-            // Snap to snap point or full open - don't close
-            willCloseModalize = false;
           }
-        } else if (closeThreshold && !cancelClose) {
-          willCloseModalize = true;
-          handleAnimateCloseOnUI();
+        } else {
+          // Snap to snap point or full open - don't close
+          willCloseModalize = false;
         }
 
         if (willCloseModalize) {

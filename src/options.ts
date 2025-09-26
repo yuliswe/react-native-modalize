@@ -93,6 +93,11 @@ export interface IProps<ListItem = any> {
   isOpen?: boolean;
 
   /**
+   * Controls whether the modal is always open or closed.
+   */
+  alwaysOpen?: boolean;
+
+  /**
    * Define where the handle on top of the modal should be positioned.
    * @default 'outside'
    */
