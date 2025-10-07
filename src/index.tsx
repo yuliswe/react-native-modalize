@@ -329,9 +329,6 @@ const ModalizeBase = (props: IProps, ref: React.Ref<IHandles>) => {
         modalPosition.value = 'top';
       }
 
-      console.log('dest', dest);
-      console.log('toValue', toValue);
-
       runOnJS(handleWillOpenOnJS)();
 
       overlay.value = withTiming(1, {
@@ -446,7 +443,6 @@ const ModalizeBase = (props: IProps, ref: React.Ref<IHandles>) => {
           if (props.alwaysOpen) {
             destSnapPoint = currentSnaps[currentSnaps.length - 1]; // Lowest snap point
             willCloseModalize = false;
-            console.log('destSnapPoint', destSnapPoint);
           } else {
             // Uncontrolled component - close the modal
             willCloseModalize = true;
@@ -491,8 +487,6 @@ const ModalizeBase = (props: IProps, ref: React.Ref<IHandles>) => {
         }
         // Update lastSnap to the destination snap point for next gesture
         lastSnap.value = destSnapPoint;
-
-        console.log('destSnapPoint', destSnapPoint);
 
         // Animate to destination snap point
         animiatedTranslateY.value = withTiming(destSnapPoint, {
@@ -612,8 +606,6 @@ const ModalizeBase = (props: IProps, ref: React.Ref<IHandles>) => {
     // Calculate the base translateY value
     const draggedAndAnimiatedY = (animiatedTranslateY.value + dragY.value) * cancelTranslateY.value;
 
-    // console.log('draggedAndAnimiatedY', draggedAndAnimiatedY);
-
     let finalTranslateY: number;
     let heightIncrease = 0;
 
@@ -638,10 +630,6 @@ const ModalizeBase = (props: IProps, ref: React.Ref<IHandles>) => {
     if (externalTranslateY) {
       externalTranslateY.value = 1 - finalTranslateY / availableScreenHeight.value;
     }
-
-    // console.log('finalTranslateY', finalTranslateY);
-    // console.log('heightIncrease', heightIncrease);
-    // console.log('childContentHeight.value', childContentHeight.value);
 
     return {
       transform: [{ translateY: finalTranslateY }],
