@@ -14,7 +14,7 @@ import Animated, {
   withTiming,
   type SharedValue,
 } from 'react-native-reanimated';
-import { ModalizeProps, TOpen, TPosition, TStyle } from './options';
+import { ModalizeProps, TOpen, TStyle } from './options';
 import { default as s } from './styles';
 import { LayoutEvent, PanGestureEvent, PanGestureStateEvent } from './types';
 import { useDimensions } from './utils/use-dimensions';
@@ -193,7 +193,7 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
 
   // UI thread only states - moved to shared values
   const lastSnap = useSharedValue(0);
-  const modalPosition = useSharedValue<TPosition>('initial');
+
   const childContentHeight = useSharedValue<number | null>(null);
 
   /** Snap points: [closed, snapPoints..., fullOpen] or [closed, fullOpen] */
@@ -335,7 +335,6 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
 
       if (dest === 'top') {
         toValue = 0;
-        modalPosition.value = 'top';
       } else if (snaps && snaps.length > 0) {
         // Use childContentHeight if available, otherwise fall back to availableScreenHeight
         const contentHeight =
@@ -347,10 +346,8 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
         const snapValue = snaps.at(initialSnapPointIndex % snaps.length)!;
         const clampedSnapValue = Math.min(Math.max(0, snapValue), contentHeight);
         toValue = contentHeight - clampedSnapValue; // Convert height to distance
-        modalPosition.value = 'initial';
       } else {
         toValue = 0;
-        modalPosition.value = 'top';
       }
 
       lastSnap.value = toValue;
@@ -435,6 +432,7 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
         const { velocityY, translationY } = event;
         // Removed negativeReverseScroll as it's no longer needed with the new snap logic
 
+        const wasTop = lastSnap.value <= 0;
         let destSnapPoint = lastSnap.value; // Start with current position
 
         const endOffsetY = lastSnap.value + translationY + dragToss * velocityY;
@@ -502,12 +500,9 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
 
           lastSnap.value = bounceTarget;
 
-          const modalPositionValue = bounceTarget <= 0 ? 'top' : 'initial';
-          if (onPositionChange && modalPosition.value !== modalPositionValue) {
-            runOnJS(onPositionChange)(modalPositionValue);
-          }
-          if (modalPosition.value !== modalPositionValue) {
-            modalPosition.value = modalPositionValue;
+          const isTop = bounceTarget <= 0;
+          if (onPositionChange && wasTop !== isTop) {
+            runOnJS(onPositionChange)(isTop ? 'top' : 'initial');
           }
 
           return;
@@ -521,14 +516,10 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
           easing: DEFAULT_SNAP_ANIMATION_EASING,
         });
 
-        const modalPositionValue = destSnapPoint <= 0 ? 'top' : 'initial';
+        const isTop = destSnapPoint <= 0;
 
-        if (onPositionChange && modalPosition.value !== modalPositionValue) {
-          runOnJS(onPositionChange)(modalPositionValue);
-        }
-
-        if (modalPosition.value !== modalPositionValue) {
-          modalPosition.value = modalPositionValue;
+        if (onPositionChange && wasTop !== isTop) {
+          runOnJS(onPositionChange)(isTop ? 'top' : 'initial');
         }
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
