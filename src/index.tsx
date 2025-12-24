@@ -86,12 +86,11 @@ const Handle = React.memo(HandleComponent);
 
 interface OverlayProps {
   withOverlay: boolean;
-  showContent: boolean;
   overlayStyle?: TStyle;
   overlay?: SharedValue<number>;
 }
 
-function OverlayComponent({ withOverlay, showContent, overlayStyle, overlay }: OverlayProps) {
+function OverlayComponent({ withOverlay, overlayStyle, overlay }: OverlayProps) {
   const animatedStyle = useAnimatedStyle(() => {
     const opacity = overlay ? overlay.value : 0;
 
@@ -107,9 +106,7 @@ function OverlayComponent({ withOverlay, showContent, overlayStyle, overlay }: O
 
   return (
     <Animated.View style={s.overlay} testID="Modalize.Overlay">
-      {showContent && (
-        <Animated.View style={[s.overlay__background, overlayStyle, animatedStyle]} />
-      )}
+      <Animated.View style={[s.overlay__background, overlayStyle, animatedStyle]} />
     </Animated.View>
   );
 }
@@ -230,7 +227,6 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
 
   // JS thread states - optimized with useMemo for initial values
   const [isVisible, setIsVisible] = React.useState(false);
-  const [showContent, setShowContent] = React.useState(true);
 
   const [internalIsOpen, setInternalIsOpen] = React.useState(true);
   const isOpen = externalIsOpen ?? internalIsOpen;
@@ -252,7 +248,6 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
   }, [onWillClose]);
 
   const handleDidCloseOnJS = useCallback(() => {
-    setShowContent(false);
     setIsVisible(false);
     setIsAnimating(false);
     onDidClose?.();
@@ -323,7 +318,6 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
     setInternalIsOpen(true);
     setIsAnimating(true);
     setIsVisible(true);
-    setShowContent(true);
   }, [onWillOpen]);
 
   const handleDidOpenOnJS = useCallback(() => {
@@ -707,30 +701,23 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
         <View style={s.modalize__wrapper} pointerEvents="box-none">
           {withOverlay && (
             <GestureDetector gesture={tapGestureOverlay}>
-              <Overlay
-                withOverlay={withOverlay}
-                showContent={showContent}
-                overlayStyle={overlayStyle}
-                overlay={overlay}
-              />
+              <Overlay withOverlay={withOverlay} overlayStyle={overlayStyle} overlay={overlay} />
             </GestureDetector>
           )}
-          {showContent && (
-            <Animated.View style={modalStyle} testID="Modalize.Content(Animated.View)">
-              <Handle
-                withHandle={withHandle}
-                handlePosition={handlePosition}
-                handleStyle={handleStyle}
-              />
-              <View
-                style={childrenStyle}
-                onLayout={handleChildrenLayout}
-                testID="Modalize.Content.View.Children"
-              >
-                {children}
-              </View>
-            </Animated.View>
-          )}
+          <Animated.View style={modalStyle} testID="Modalize.Content(Animated.View)">
+            <Handle
+              withHandle={withHandle}
+              handlePosition={handlePosition}
+              handleStyle={handleStyle}
+            />
+            <View
+              style={childrenStyle}
+              onLayout={handleChildrenLayout}
+              testID="Modalize.Content.View.Children"
+            >
+              {children}
+            </View>
+          </Animated.View>
         </View>
       </GestureDetector>
     </View>
