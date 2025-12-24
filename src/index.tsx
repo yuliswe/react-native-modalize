@@ -8,7 +8,6 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   Easing,
   runOnJS,
-  runOnUI,
   useAnimatedStyle,
   useDerivedValue,
   useSharedValue,
@@ -134,8 +133,7 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
     overlayStyle,
 
     // Layout
-    snapPoints = [1, 0],
-    initialSnapPoint = 0,
+    initialSnapPointIndex = -1,
     modalTopOffset = 0,
     isOpen: externalIsOpen,
 
@@ -183,8 +181,7 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
   } = props;
 
   const { height: screenHeight, width: screenWidth } = useDimensions();
-  const { keyboardHeight: rawKeyboardHeight, isKeyboardVisible: rawIsKeyboardVisible } =
-    useKeyboardHeight();
+  const { keyboardHeight: rawKeyboardHeight } = useKeyboardHeight();
 
   const avoidKeyboardShared = useSharedValue(avoidKeyboard);
 
@@ -209,50 +206,33 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
   const childContentHeight = useSharedValue<number | null>(null);
 
   /** Snap points: [closed, snapPoints..., fullOpen] or [closed, fullOpen] */
-  const snaps = useDerivedValue(() => {
+  const processedSnapPoints = useDerivedValue(() => {
     'worklet';
 
-    if (!snapPoints || snapPoints.length === 0) {
-      // Default to [1, 0] in percentage terms: 1 = open, 0 = closed
-      // This translates to distances: [0, contentHeight]
-      return [0, availableScreenHeight.value];
+    if (!props.snapPoints || props.snapPoints.length === 0) {
+      if (props.alwaysOpen) {
+        return [0]; // Fully open
+      }
+      return [
+        0, // Fully open
+        availableScreenHeight.value, // Closed
+      ];
     }
 
     // Use childContentHeight if available, otherwise fall back to availableScreenHeight
     const contentHeight =
       childContentHeight.value !== null ? childContentHeight.value : availableScreenHeight.value;
 
-    // Convert percentage-based snap points to actual distances
-    // snapPoints are percentages: 0 = closed, 1 = fully open
-    // actualDistance = contentHeight * (1 - percentage)
-    const snapDistances = snapPoints.map(percentage => contentHeight * (1 - percentage));
-
-    // Use Set for deduplication, then convert back to sorted array
-    const uniqueSnaps = new Set(snapDistances);
-    return Array.from(uniqueSnaps).sort((a, b) => a - b);
-  }, [snapPoints, childContentHeight, availableScreenHeight]);
-
-  /** Current actual height of the modal (can change based on content) */
-
-  // Initialize lastSnap based on snap points
-  React.useEffect(() => {
-    if (snapPoints && snapPoints.length > 0) {
-      runOnUI(() => {
-        'worklet';
-        const snapIndex = Math.min(initialSnapPoint, snapPoints.length - 1);
-        const percentage = snapPoints[snapIndex];
-
-        // Use childContentHeight if available, otherwise fall back to availableScreenHeight
-        const contentHeight =
-          childContentHeight.value !== null
-            ? childContentHeight.value
-            : availableScreenHeight.value;
-
-        lastSnap.value = contentHeight * (1 - percentage);
-      })();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [snapPoints, initialSnapPoint, availableScreenHeight, childContentHeight]);
+    // Convert snap points (heights) to actual distances (translateY) and sort
+    return Array.from(
+      new Set([
+        contentHeight, // Always add full open
+        ...props.snapPoints,
+      ]),
+    )
+      .map(val => contentHeight - Math.min(contentHeight, Math.max(val, 0)))
+      .sort((a, b) => a - b);
+  }, [props.snapPoints, childContentHeight, availableScreenHeight]);
 
   // JS thread states - optimized with useMemo for initial values
   const [isVisible, setIsVisible] = React.useState(false);
@@ -317,13 +297,6 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
       finished => {
         'worklet';
         if (finished) {
-          // Use childContentHeight if available, otherwise fall back to availableScreenHeight
-          const contentHeight =
-            childContentHeight.value !== null
-              ? childContentHeight.value
-              : availableScreenHeight.value;
-
-          lastSnap.value = snapPoints ? contentHeight * (1 - snapPoints[0]) : 80;
           runOnJS(handleDidCloseOnJS)();
         }
       },
@@ -334,8 +307,8 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
     closeAnimationEasing,
     closeAnimationDelay,
     closeAnimationIsInteraction,
-    snapPoints,
-    snaps,
+    props.snapPoints,
+    processedSnapPoints,
     screenHeight,
     onDidClose,
     onWillClose,
@@ -370,25 +343,29 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
 
       let toValue = 0;
 
+      const snaps = processedSnapPoints.value;
+
       if (dest === 'top') {
         toValue = 0;
         modalPosition.value = 'top';
-      } else if (snapPoints && snapPoints.length > 0) {
-        const snapIndex = Math.min(initialSnapPoint, snapPoints.length - 1);
-        const percentage = snapPoints[snapIndex];
-
+      } else if (snaps && snaps.length > 0) {
         // Use childContentHeight if available, otherwise fall back to availableScreenHeight
         const contentHeight =
           childContentHeight.value !== null
             ? childContentHeight.value
             : availableScreenHeight.value;
 
-        toValue = contentHeight * (1 - percentage); // Convert percentage to actual distance
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        const snapValue = snaps.at(initialSnapPointIndex % snaps.length)!;
+        const clampedSnapValue = Math.min(Math.max(0, snapValue), contentHeight);
+        toValue = contentHeight - clampedSnapValue; // Convert height to distance
         modalPosition.value = 'initial';
       } else {
         toValue = 0;
         modalPosition.value = 'top';
       }
+
+      lastSnap.value = toValue;
 
       runOnJS(handleWillOpenOnJS)();
 
@@ -417,8 +394,9 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
       openAnimationEasing,
       openAnimationDelay,
       openAnimationIsInteraction,
-      snapPoints,
-      initialSnapPoint,
+      processedSnapPoints.value,
+      props.snapPoints?.length,
+      initialSnapPointIndex,
       availableScreenHeight,
       onDidOpen,
     ],
@@ -474,15 +452,15 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
         const endOffsetY = lastSnap.value + translationY + dragToss * velocityY;
 
         // Get current snaps array (always available, defaults to [0, contentHeight] when no snapPoints)
-        const currentSnaps = snaps.value;
+        const snaps = processedSnapPoints.value;
 
         // Find the nearest snap point with optimized search
-        let nearestSnap = currentSnaps[0];
-        let minDistance = Math.abs(currentSnaps[0] - endOffsetY);
+        let nearestSnap = snaps[0];
+        let minDistance = Math.abs(snaps[0] - endOffsetY);
 
         // Use for loop instead of forEach for better performance
-        for (let i = 1; i < currentSnaps.length; i++) {
-          const snap = currentSnaps[i];
+        for (let i = 1; i < snaps.length; i++) {
+          const snap = snaps[i];
           const distFromSnap = Math.abs(snap - endOffsetY);
 
           if (distFromSnap < minDistance) {
@@ -502,7 +480,7 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
         if (nearestSnap >= contentHeight) {
           // User tossed below the lowest snap point
           if (props.alwaysOpen) {
-            destSnapPoint = currentSnaps[currentSnaps.length - 1]; // Lowest snap point
+            destSnapPoint = snaps[snaps.length - 1]; // Lowest snap point
             willCloseModalize = false;
           } else {
             // Uncontrolled component - close the modal
@@ -526,7 +504,7 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
         // If we're in overdrag territory, bounce back to nearest valid position
         if (currentVisualPosition < 0) {
           // Overdragged upward - bounce to top bound or closest snap point
-          const bounceTarget = snapPoints && destSnapPoint < 0 ? destSnapPoint : 0;
+          const bounceTarget = Math.min(destSnapPoint, 0);
 
           // Use bounce animation with spring physics for natural feel
           animiatedTranslateY.value = withTiming(bounceTarget, {
@@ -570,10 +548,10 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
     externalPanGesture,
     threshold,
     velocity,
-    snapPoints,
+    props.snapPoints,
     cancelClose,
     dragToss,
-    snaps,
+    processedSnapPoints,
     handleAnimateCloseOnUI,
     onPositionChange,
     enableOverdrag,

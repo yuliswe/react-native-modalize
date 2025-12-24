@@ -68,9 +68,9 @@ export interface ModalizeProps<ListItem = any> {
 
   /**
    * An array of numbers that will enable the snapping feature and create intermediate points before opening the modal to full screen.
-   * Each number represents the percentage of modal child content height: 0 = completely closed, 1 = completely open.
-   * For example, [0.3, 0.7] means the modal can snap to 30% or 70% of its child content height.
-   * The snap points are calculated based on the actual height of the modal's content, not the screen height.
+   * Each number represents the height of the modal in pixels.
+   * For example, [300, 600] means the modal can snap to 300px or 600px height.
+   * The snap points are calculated based on the actual height of the modal's content.
    */
   snapPoints?: number[];
 
@@ -79,7 +79,7 @@ export interface ModalizeProps<ListItem = any> {
    * If not provided, defaults to the first snap point (index 0).
    * @default 0
    */
-  initialSnapPoint?: number;
+  initialSnapPointIndex?: number;
 
   /**
    * A number to define the modal's top offset.
@@ -308,5 +308,3 @@ export interface ModalizeProps<ListItem = any> {
    */
   onLayout?(event: LayoutEvent): void;
 }
-
-
