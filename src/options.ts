@@ -29,7 +29,7 @@ export interface ISpringProps {
   mass?: number;
 }
 
-export interface IProps<ListItem = any> {
+export interface ModalizeProps<ListItem = any> {
   testID?: string;
   /**
    * A reference to the view (ScrollView, FlatList, SectionList) that provides the scroll behavior, where you will be able to access their owns methods.
@@ -309,17 +309,4 @@ export interface IProps<ListItem = any> {
   onLayout?(event: LayoutEvent): void;
 }
 
-export interface IHandles {
-  /**
-   * Method to open Modalize.
-   *
-   * If you are using `snapPoint` prop, you can supply a `dest` argument to the `open` method, to open it
-   * to the top directly `open('top')`. You don't have to provide anything if you want the default behavior.
-   */
-  open(dest?: TOpen): void;
 
-  /**
-   * The method to close Modalize. You don't need to call it to dismiss the modal, since you can swipe down to dismiss.
-   */
-  close(): void;
-}

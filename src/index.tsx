@@ -13,13 +13,13 @@ import Animated, {
   useDerivedValue,
   useSharedValue,
   withTiming,
+  type SharedValue,
 } from 'react-native-reanimated';
-import { Handle } from './components/Handle';
-import { Overlay } from './components/Overlay';
-import { IHandles, IProps, TOpen, TPosition } from './options';
+import { ModalizeProps, TOpen, TPosition, TStyle } from './options';
 import { default as s } from './styles';
 import { LayoutEvent, PanGestureEvent, PanGestureStateEvent } from './types';
 import { useDimensions } from './utils/use-dimensions';
+import type { ModalizeRef } from './utils/use-modalize';
 import { useKeyboardHeight } from './utils/useKeyboardHeight';
 
 // Removed SCROLL_THRESHOLD as it's no longer needed with the new snap logic
@@ -59,7 +59,68 @@ const calculateOverdragResistance = (offset: number, resistance: number): number
   return sign * dampenedOffset;
 };
 
-const ModalizeBase = (props: IProps, ref: React.Ref<IHandles>) => {
+interface HandleProps {
+  withHandle: boolean;
+  handlePosition: 'inside' | 'outside';
+  handleStyle?: TStyle;
+}
+
+function HandleComponent({ withHandle, handlePosition, handleStyle }: HandleProps) {
+  const handleStyles: (TStyle | undefined)[] = [s.handle];
+  const shapeStyles: (TStyle | undefined)[] = [s.handle__shape, handleStyle];
+  const isHandleOutside = handlePosition === 'outside';
+
+  if (!withHandle) {
+    return null;
+  }
+
+  if (!isHandleOutside) {
+    handleStyles.push(s.handleBottom);
+    shapeStyles.push(s.handle__shapeBottom, handleStyle);
+  }
+
+  return (
+    <Animated.View style={handleStyles} testID="Modalize.Handle">
+      <View style={shapeStyles} />
+    </Animated.View>
+  );
+}
+
+const Handle = React.memo(HandleComponent);
+
+interface OverlayProps {
+  withOverlay: boolean;
+  showContent: boolean;
+  overlayStyle?: TStyle;
+  overlay?: SharedValue<number>;
+}
+
+function OverlayComponent({ withOverlay, showContent, overlayStyle, overlay }: OverlayProps) {
+  const animatedStyle = useAnimatedStyle(() => {
+    const opacity = overlay ? overlay.value : 0;
+
+    return {
+      opacity,
+      pointerEvents: 'auto',
+    };
+  });
+
+  if (!withOverlay) {
+    return null;
+  }
+
+  return (
+    <Animated.View style={s.overlay} testID="Modalize.Overlay">
+      {showContent && (
+        <Animated.View style={[s.overlay__background, overlayStyle, animatedStyle]} />
+      )}
+    </Animated.View>
+  );
+}
+
+const Overlay = React.memo(OverlayComponent);
+
+const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
   // eslint-disable-next-line @typescript-eslint/unbound-method
   const {
     testID,
@@ -676,7 +737,6 @@ const ModalizeBase = (props: IProps, ref: React.Ref<IHandles>) => {
             <GestureDetector gesture={tapGestureOverlay}>
               <Overlay
                 withOverlay={withOverlay}
-                modalPosition={modalPosition}
                 showContent={showContent}
                 overlayStyle={overlayStyle}
                 overlay={overlay}
@@ -732,11 +792,7 @@ const ModalizeBase = (props: IProps, ref: React.Ref<IHandles>) => {
   return renderModalize;
 };
 
-export type ModalizeProps = IProps;
-export type Modalize = IHandles;
-
-export const Modalize = React.memo(React.forwardRef(ModalizeBase));
+export { ModalizeProps } from './options';
 export * from './utils/use-modalize';
 
-export type { HandleProps } from './components/Handle';
-export type { OverlayProps } from './components/Overlay';
+export const Modalize = React.memo(React.forwardRef(ModalizeBase));
