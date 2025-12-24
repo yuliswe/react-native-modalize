@@ -85,12 +85,11 @@ function HandleComponent({ withHandle, handlePosition, handleStyle }: HandleProp
 const Handle = React.memo(HandleComponent);
 
 interface OverlayProps {
-  withOverlay: boolean;
   overlayStyle?: TStyle;
   overlay?: SharedValue<number>;
 }
 
-function OverlayComponent({ withOverlay, overlayStyle, overlay }: OverlayProps) {
+function OverlayComponent({ overlayStyle, overlay }: OverlayProps) {
   const animatedStyle = useAnimatedStyle(() => {
     const opacity = overlay ? overlay.value : 0;
 
@@ -99,10 +98,6 @@ function OverlayComponent({ withOverlay, overlayStyle, overlay }: OverlayProps) 
       pointerEvents: 'auto',
     };
   });
-
-  if (!withOverlay) {
-    return null;
-  }
 
   return (
     <Animated.View style={s.overlay} testID="Modalize.Overlay">
@@ -692,7 +687,7 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
         <View style={s.modalize__wrapper} pointerEvents="box-none">
           {withOverlay && (
             <GestureDetector gesture={tapGestureOverlay}>
-              <Overlay withOverlay={withOverlay} overlayStyle={overlayStyle} overlay={overlay} />
+              <Overlay overlayStyle={overlayStyle} overlay={overlay} />
             </GestureDetector>
           )}
           <Animated.View style={modalStyle} testID="Modalize.Content(Animated.View)">
