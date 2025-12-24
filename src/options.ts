@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { ViewStyle, SectionList, StyleProp, ModalProps } from 'react-native';
+import { ViewStyle, SectionList, StyleProp } from 'react-native';
 import {
   ScrollView as RNGHScrollView,
   FlatList as RNGHFlatList,
@@ -192,17 +192,6 @@ export interface ModalizeProps<ListItem = any> {
    * while allowing the parent to add additional custom handlers.
    */
   panGesture?: PanGesture; // Gesture.Pan() type from react-native-gesture-handler
-
-  /**
-   * Define if Modalize has to be wrap with the Modal component from react-native.
-   * @default false
-   */
-  withReactModal?: boolean;
-
-  /**
-   * Props for the react-native Modal wrapping Modalize
-   */
-  reactModalProps?: ModalProps;
 
   /**
    * Define if the handle on top of the modal is display or not.

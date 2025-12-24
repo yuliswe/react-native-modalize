@@ -3,7 +3,7 @@
  * on snack.expo for some reason. Will revisit this later.
  */
 import React, { useCallback, useMemo } from 'react';
-import { BackHandler, Modal, View, type NativeEventSubscription } from 'react-native';
+import { BackHandler, View, type NativeEventSubscription } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   Easing,
@@ -20,9 +20,6 @@ import { LayoutEvent, PanGestureEvent, PanGestureStateEvent } from './types';
 import { useDimensions } from './utils/use-dimensions';
 import type { ModalizeRef } from './utils/use-modalize';
 import { useKeyboardHeight } from './utils/useKeyboardHeight';
-
-// Removed SCROLL_THRESHOLD as it's no longer needed with the new snap logic
-const USE_NATIVE_DRIVER = true;
 
 // Animation constants
 const DEFAULT_OPEN_ANIMATION_DURATION = 280;
@@ -156,9 +153,6 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
     translateY: externalTranslateY,
     panGesture: externalPanGesture,
 
-    // Elements visibilities
-    withReactModal = false,
-    reactModalProps,
     withHandle = true,
     withOverlay = true,
     avoidKeyboard = false,
@@ -742,29 +736,8 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
     </View>
   );
 
-  const renderReactModal = useCallback(
-    (child: JSX.Element): JSX.Element => (
-      <Modal
-        {...reactModalProps}
-        testID={`${testID ?? 'Modalize'}.Modal`}
-        supportedOrientations={['landscape', 'portrait', 'portrait-upside-down']}
-        onRequestClose={handleBackPress}
-        hardwareAccelerated={USE_NATIVE_DRIVER}
-        visible={isVisible}
-        transparent
-      >
-        {child}
-      </Modal>
-    ),
-    [reactModalProps, handleBackPress, isVisible, testID],
-  );
-
   if (!isVisible) {
     return null;
-  }
-
-  if (withReactModal) {
-    return renderReactModal(renderModalize);
   }
 
   return renderModalize;
