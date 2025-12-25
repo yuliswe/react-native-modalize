@@ -8,6 +8,10 @@ import {
 import { EasingFunction } from 'react-native-reanimated';
 import { LayoutEvent } from './types';
 
+export enum InitialSnapPointIndex {
+  FullyOpen = 0,
+}
+
 export type TStyle = StyleProp<ViewStyle>;
 
 export interface ITimingProps {
@@ -77,7 +81,7 @@ export interface ModalizeProps<ListItem = any> {
    * If not provided, defaults to the first snap point (index 0).
    * @default 0
    */
-  initialSnapPointIndex?: number;
+  initialSnapPointIndex?: number | InitialSnapPointIndex.FullyOpen;
 
   /**
    * A number to define the modal's top offset.

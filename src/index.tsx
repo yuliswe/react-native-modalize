@@ -14,12 +14,13 @@ import Animated, {
   withTiming,
   type SharedValue,
 } from 'react-native-reanimated';
-import { ModalizeProps, TStyle } from './options';
+import { InitialSnapPointIndex, ModalizeProps, TStyle } from './options';
 import { default as s } from './styles';
 import { LayoutEvent, PanGestureEvent, PanGestureStateEvent } from './types';
 import { useDimensions } from './utils/use-dimensions';
 import type { ModalizeRef } from './utils/use-modalize';
 import { useKeyboardHeight } from './utils/useKeyboardHeight';
+import { useStateWithSharedValue } from './utils/useStateWithSharedValue';
 
 // Animation constants
 const DEFAULT_OPEN_ANIMATION_DURATION = 280;
@@ -56,19 +57,14 @@ const calculateOverdragResistance = (offset: number, resistance: number): number
 };
 
 interface HandleProps {
-  withHandle: boolean;
   handlePosition: 'inside' | 'outside';
   handleStyle?: TStyle;
 }
 
-function HandleComponent({ withHandle, handlePosition, handleStyle }: HandleProps) {
+function HandleComponent({ handlePosition, handleStyle }: HandleProps) {
   const handleStyles: (TStyle | undefined)[] = [s.handle];
   const shapeStyles: (TStyle | undefined)[] = [s.handle__shape, handleStyle];
   const isHandleOutside = handlePosition === 'outside';
-
-  if (!withHandle) {
-    return null;
-  }
 
   if (!isHandleOutside) {
     handleStyles.push(s.handleBottom);
@@ -122,7 +118,7 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
     overlayStyle,
 
     // Layout
-    initialSnapPointIndex = -1,
+    initialSnapPointIndex = InitialSnapPointIndex.FullyOpen,
     modalTopOffset = 0,
     isOpen: externalIsOpen,
 
@@ -186,13 +182,20 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
   }, [screenHeight, modalTopOffset]);
 
   // UI thread only states - moved to shared values
-  const lastSnap = useSharedValue(-1);
+  const lastSnapY = useSharedValue(-1);
 
   const childContentHeight = useSharedValue<number | null>(null);
 
   /** Snap points: [closed, snapPoints..., fullOpen] or [closed, fullOpen] */
-  const processedSnapPoints = useDerivedValue(() => {
+  const processedSnapPointsY = useDerivedValue(() => {
     'worklet';
+
+    const contentHeight = childContentHeight.value;
+
+    if (contentHeight === null) {
+      // While waiting for the content to be measured, render off screen
+      return [availableScreenHeight.value];
+    }
 
     if (!props.snapPoints || props.snapPoints.length === 0) {
       if (props.alwaysOpen) {
@@ -200,18 +203,15 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
       }
       return [
         0, // Fully open
-        availableScreenHeight.value, // Closed
+        contentHeight, // Closed
       ];
     }
-
-    // Use childContentHeight if available, otherwise fall back to availableScreenHeight
-    const contentHeight =
-      childContentHeight.value !== null ? childContentHeight.value : availableScreenHeight.value;
-
     // Convert snap points (heights) to actual distances (translateY) and sort
     return Array.from(
       new Set([
-        contentHeight, // Always add full open
+        // Always add fully open and closed
+        0, // Open
+        contentHeight, // Closed
         ...props.snapPoints,
       ]),
     )
@@ -220,34 +220,34 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
   }, [props.snapPoints, childContentHeight, availableScreenHeight]);
 
   // JS thread states - optimized with useMemo for initial values
-  const [isVisible, setIsVisible] = React.useState(false);
+  const [isVisible, setIsVisible, isVisibleShared] = useStateWithSharedValue(false);
 
-  const [internalIsOpen, setInternalIsOpen] = React.useState(true);
+  const [internalIsOpen, setInternalIsOpen, _internalIsOpenShared] = useStateWithSharedValue(true);
   const isOpen = externalIsOpen ?? internalIsOpen;
 
-  const [cancelClose, setCancelClose] = React.useState(false);
+  const [cancelClose, setCancelClose, _cancelCloseShared] = useStateWithSharedValue(false);
 
   // Animation state tracking to prevent double animations
-  const [isAnimating, setIsAnimating] = React.useState(false);
+  const [isAnimating, setIsAnimating, isAnimatingShared] = useStateWithSharedValue(false);
 
   const cancelTranslateY = useSharedValue(1); // 1 by default to have the translateY animation running
   const overlay = useSharedValue(0);
   const dragY = useSharedValue(0);
   const overdragHeightIncr = useSharedValue(0); // Track height increase during overdrag
-  const animiatedTranslateY = useSharedValue(screenHeight);
+  const targetTranslateY = useSharedValue(screenHeight); // Where the modal is moving toward
 
   const handleWillCloseOnJSThread = useCallback(() => {
     onWillClose?.();
     setInternalIsOpen(false);
-  }, [onWillClose]);
+  }, [onWillClose, setInternalIsOpen]);
 
   const handleDidCloseOnJSThread = useCallback(() => {
     setIsVisible(false);
     setIsAnimating(false);
     onDidClose?.();
-  }, [onDidClose]);
+  }, [onDidClose, setIsVisible, setIsAnimating]);
 
-  const handleAnimateCloseOnUIThread = useCallback((): void => {
+  const startAnimateCloseOnUIThread = useCallback((): void => {
     'worklet';
 
     runOnJSThread(handleWillCloseOnJSThread)();
@@ -258,7 +258,7 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
     cancelTranslateY.value = 1;
 
     // Calculate current visual position and update translateY to start from there
-    animiatedTranslateY.value = animiatedTranslateY.value + dragY.value;
+    targetTranslateY.value = targetTranslateY.value + dragY.value;
     dragY.value = 0;
 
     // Animate overlay
@@ -271,7 +271,7 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
     dragY.value = 0;
 
     // Animate translateY from current position to destination
-    animiatedTranslateY.value = withTiming(
+    targetTranslateY.value = withTiming(
       screenHeight,
       {
         duration: closeAnimationDuration,
@@ -291,7 +291,7 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
     closeAnimationDelay,
     closeAnimationIsInteraction,
     props.snapPoints,
-    processedSnapPoints,
+    processedSnapPointsY,
     screenHeight,
     onDidClose,
     onWillClose,
@@ -301,61 +301,61 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
     if (onBackButtonPress) {
       return onBackButtonPress();
     } else {
-      handleAnimateCloseOnUIThread();
+      startAnimateCloseOnUIThread();
     }
 
     return true;
-  }, [onBackButtonPress, handleAnimateCloseOnUIThread]);
+  }, [onBackButtonPress, startAnimateCloseOnUIThread]);
 
   const handleWillOpenOnJSThread = useCallback(() => {
     onWillOpen?.();
     setInternalIsOpen(true);
     setIsAnimating(true);
     setIsVisible(true);
-  }, [onWillOpen]);
+  }, [onWillOpen, setInternalIsOpen, setIsAnimating, setIsVisible]);
 
   const handleDidOpenOnJSThread = useCallback(() => {
     onDidOpen?.();
     setIsAnimating(false);
-  }, [onDidOpen]);
+  }, [onDidOpen, setIsAnimating]);
 
-  const handleAnimateOpenOnUIThread = useCallback(
-    (): void => {
+  const startAnimateOpenOnUIThread = useCallback(
+    () => {
       'worklet';
 
-      let toValue = 0;
-
-      const snaps = processedSnapPoints.value;
-      const shouldUseLastSnap = lastSnap.value !== -1;
-
-      if (shouldUseLastSnap) {
-        toValue = lastSnap.value;
-      } else if (snaps && snaps.length > 0) {
-        // Use childContentHeight if available, otherwise fall back to availableScreenHeight
-        const contentHeight =
-          childContentHeight.value !== null
-            ? childContentHeight.value
-            : availableScreenHeight.value;
-
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-        const snapValue = snaps.at(initialSnapPointIndex % snaps.length)!;
-        const clampedSnapValue = Math.min(Math.max(0, snapValue), contentHeight);
-        toValue = contentHeight - clampedSnapValue; // Convert height to distance
-      } else {
-        toValue = 0;
+      // If we don't have the content height yet (first open), defer the animation
+      if (childContentHeight.value === null) {
+        console.error('Call startAnimateOpenJSThreadWrapper instead of startAnimateOpenOnUIThread');
+        return;
       }
 
-      lastSnap.value = toValue;
+      let toValueY = 0;
 
-      runOnJSThread(handleWillOpenOnJSThread)();
+      const snapsY = processedSnapPointsY.value;
+      const shouldUseLastSnap = lastSnapY.value !== -1;
+
+      if (shouldUseLastSnap) {
+        toValueY = lastSnapY.value;
+      } else if (snapsY && snapsY.length > 0) {
+        const snapValueY =
+          initialSnapPointIndex === InitialSnapPointIndex.FullyOpen
+            ? 0
+            : snapsY[initialSnapPointIndex % snapsY.length];
+
+        toValueY = snapValueY; // Convert height to distance
+      } else {
+        toValueY = 0;
+      }
+
+      lastSnapY.value = toValueY;
 
       overlay.value = withTiming(1, {
         duration: openAnimationDuration,
         easing: openAnimationEasing,
       });
 
-      animiatedTranslateY.value = withTiming(
-        toValue,
+      targetTranslateY.value = withTiming(
+        toValueY,
         {
           duration: openAnimationDuration,
           easing: openAnimationEasing,
@@ -374,7 +374,7 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
       openAnimationEasing,
       openAnimationDelay,
       openAnimationIsInteraction,
-      processedSnapPoints.value,
+      processedSnapPointsY.value,
       props.snapPoints?.length,
       initialSnapPointIndex,
       availableScreenHeight,
@@ -382,16 +382,34 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
     ],
   );
 
+  const startAnimateOpenJSThreadWrapper = useCallback(async () => {
+    if (isAnimating || isVisible) {
+      return;
+    }
+
+    handleWillOpenOnJSThread();
+
+    while (childContentHeight.value === null) {
+      await new Promise(resolve => setTimeout(resolve, 1));
+    }
+
+    startAnimateOpenOnUIThread();
+  }, [
+    childContentHeight,
+    isAnimating,
+    isVisible,
+    handleWillOpenOnJSThread,
+    startAnimateOpenOnUIThread,
+  ]);
+
   const handleChildrenLayout = useCallback(
     (event: LayoutEvent): void => {
-      'worklet';
-      childContentHeight.value = event.nativeEvent.layout.height;
+      const height = event.nativeEvent.layout.height;
+      childContentHeight.value = height;
 
-      if (onLayout) {
-        runOnJSThread(onLayout)(event);
-      }
+      onLayout?.(event);
     },
-    [onLayout],
+    [onLayout, childContentHeight],
   );
 
   // V2 Gesture definitions with proper composition
@@ -427,30 +445,29 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
         const { velocityY, translationY } = event;
         // Removed negativeReverseScroll as it's no longer needed with the new snap logic
 
-        const wasTop = lastSnap.value <= 0;
-        let destSnapPoint = lastSnap.value; // Start with current position
+        let destSnapPointY = lastSnapY.value; // Start with current position
 
-        const endOffsetY = lastSnap.value + translationY + dragToss * velocityY;
+        const endOffsetY = lastSnapY.value + translationY + dragToss * velocityY;
 
         // Get current snaps array (always available, defaults to [0, contentHeight] when no snapPoints)
-        const snaps = processedSnapPoints.value;
+        const snapsY = processedSnapPointsY.value;
 
         // Find the nearest snap point with optimized search
-        let nearestSnap = snaps[0];
-        let minDistance = Math.abs(snaps[0] - endOffsetY);
+        let nearestSnapY = snapsY[0];
+        let minDistance = Math.abs(snapsY[0] - endOffsetY);
 
         // Use for loop instead of forEach for better performance
-        for (let i = 1; i < snaps.length; i++) {
-          const snap = snaps[i];
+        for (let i = 1; i < snapsY.length; i++) {
+          const snap = snapsY[i];
           const distFromSnap = Math.abs(snap - endOffsetY);
 
           if (distFromSnap < minDistance) {
             minDistance = distFromSnap;
-            nearestSnap = snap;
+            nearestSnapY = snap;
           }
         }
 
-        destSnapPoint = nearestSnap;
+        destSnapPointY = nearestSnapY;
 
         // Use childContentHeight if available, otherwise fall back to availableScreenHeight
         const contentHeight =
@@ -458,15 +475,15 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
             ? childContentHeight.value
             : availableScreenHeight.value;
 
-        if (nearestSnap >= contentHeight) {
+        if (nearestSnapY >= contentHeight) {
           // User tossed below the lowest snap point
           if (props.alwaysOpen) {
-            destSnapPoint = snaps[snaps.length - 1]; // Lowest snap point
+            destSnapPointY = snapsY[snapsY.length - 1]; // Lowest snap point
             willCloseModalize = false;
           } else {
             // Uncontrolled component - close the modal
             willCloseModalize = true;
-            handleAnimateCloseOnUIThread();
+            startAnimateCloseOnUIThread();
           }
         } else {
           // Snap to snap point or full open - don't close
@@ -478,30 +495,30 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
         }
 
         // Calculate the current visual position (where the modal actually is visually)
-        const currentVisualPosition = animiatedTranslateY.value + dragY.value;
-        animiatedTranslateY.value = currentVisualPosition;
+        const currentVisualPosition = targetTranslateY.value + dragY.value;
+        targetTranslateY.value = currentVisualPosition;
         dragY.value = 0;
 
         // If we're in overdrag territory, bounce back to nearest valid position
         if (currentVisualPosition < 0) {
           // Overdragged upward - bounce to top bound or closest snap point
-          const bounceTarget = Math.min(destSnapPoint, 0);
+          const bounceTarget = Math.min(destSnapPointY, 0);
 
           // Use bounce animation with spring physics for natural feel
-          animiatedTranslateY.value = withTiming(bounceTarget, {
+          targetTranslateY.value = withTiming(bounceTarget, {
             duration: DEFAULT_OVERDRAG_BOUNCE_DURATION,
             easing: DEFAULT_OVERDRAG_BOUNCE_EASING,
           });
 
-          lastSnap.value = bounceTarget;
+          lastSnapY.value = bounceTarget;
 
           return;
         }
         // Update lastSnap to the destination snap point for next gesture
-        lastSnap.value = destSnapPoint;
+        lastSnapY.value = destSnapPointY;
 
         // Animate to destination snap point
-        animiatedTranslateY.value = withTiming(destSnapPoint, {
+        targetTranslateY.value = withTiming(destSnapPointY, {
           duration: DEFAULT_SNAP_ANIMATION_DURATION,
           easing: DEFAULT_SNAP_ANIMATION_EASING,
         });
@@ -514,8 +531,8 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
     props.snapPoints,
     cancelClose,
     dragToss,
-    processedSnapPoints,
-    handleAnimateCloseOnUIThread,
+    processedSnapPointsY,
+    startAnimateCloseOnUIThread,
     enableOverdrag,
     overdragResistance,
     overdragBounceDuration,
@@ -533,10 +550,10 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
             runOnJSThread(onOverlayPress)();
           }
 
-          handleAnimateCloseOnUIThread();
+          startAnimateCloseOnUIThread();
         })
         .requireExternalGestureToFail(panGestureModalize),
-    [closeOnOverlayTap, onOverlayPress, handleAnimateCloseOnUIThread, panGestureModalize],
+    [closeOnOverlayTap, onOverlayPress, startAnimateCloseOnUIThread, panGestureModalize],
   );
 
   // Separate gesture detectors:
@@ -548,23 +565,23 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
     () => ({
       open() {
         // Prevent opening if already animating
-        if (isAnimating) {
+        if (isAnimating || isVisible) {
           return;
         }
 
-        handleAnimateOpenOnUIThread();
+        void startAnimateOpenJSThreadWrapper();
       },
 
       close() {
         // Prevent closing if already animating
-        if (isAnimating) {
+        if (isAnimating || !isVisible) {
           return;
         }
 
-        handleAnimateCloseOnUIThread();
+        startAnimateCloseOnUIThread();
       },
     }),
-    [isAnimating, handleAnimateOpenOnUIThread, handleAnimateCloseOnUIThread],
+    [isAnimating, isVisible, startAnimateOpenJSThreadWrapper, startAnimateCloseOnUIThread],
   );
 
   React.useEffect(() => {
@@ -574,11 +591,17 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
     }
 
     if (isOpen && !isVisible) {
-      handleAnimateOpenOnUIThread();
+      void startAnimateOpenJSThreadWrapper();
     } else if (!isOpen && isVisible) {
-      handleAnimateCloseOnUIThread();
+      startAnimateCloseOnUIThread();
     }
-  }, [isOpen, isVisible, isAnimating, handleAnimateOpenOnUIThread, handleAnimateCloseOnUIThread]);
+  }, [
+    isOpen,
+    isVisible,
+    isAnimating,
+    startAnimateOpenJSThreadWrapper,
+    startAnimateCloseOnUIThread,
+  ]);
 
   // Manage back button listener based on visibility
   React.useEffect(() => {
@@ -605,7 +628,7 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
     }
 
     // Calculate the base translateY value
-    const draggedAndAnimiatedY = (animiatedTranslateY.value + dragY.value) * cancelTranslateY.value;
+    const draggedAndAnimiatedY = (targetTranslateY.value + dragY.value) * cancelTranslateY.value;
 
     let finalTranslateY: number;
     let heightIncrease = 0;
@@ -632,6 +655,8 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
       externalTranslateY.value = 1 - finalTranslateY / availableScreenHeight.value;
     }
 
+    console.log('finalTranslateY', finalTranslateY);
+
     return {
       transform: [{ translateY: finalTranslateY }],
       height:
@@ -642,33 +667,33 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
     };
   }, []);
 
-  const modalStyle = useMemo(
-    () => {
-      return [s.modalStyle, props.modalStyle, animatedModalStyle];
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [props.modalStyle],
-  );
+  const modalStyle = useMemo(() => {
+    return [s.modalStyle, props.modalStyle, animatedModalStyle];
+  }, [props.modalStyle, animatedModalStyle]);
 
-  const childrenStyle = useMemo(
-    () => {
-      return [
-        s.childrenStyle,
-        props.childrenStyle,
-        {
-          width: screenWidth,
-          maxHeight: availableScreenHeight.value,
-        },
-      ];
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [props.childrenStyle, screenWidth],
-  );
+  const childrenStyle = useMemo(() => {
+    return [
+      s.childrenStyle,
+      props.childrenStyle,
+      {
+        width: screenWidth,
+        maxHeight: availableScreenHeight.value,
+      },
+    ];
+  }, [props.childrenStyle, screenWidth, availableScreenHeight.value]);
+
+  if (!isVisible) {
+    return null;
+  }
+
+  console.log('isVisible', isVisible);
+  console.log('modalStyle', modalStyle);
+  console.log('animatedModalStyle.transform', animatedModalStyle.transform);
 
   // Make sure the children height is exactly the same as the modal height. Ie,
   // only use padding in the children. Do not use margin. This is the only way
   // to make the layout calculated correctly.
-  const renderModalize = (
+  return (
     <View style={[s.modalize, rootStyle]} pointerEvents={!withOverlay ? 'box-none' : 'auto'}>
       {/* GestureDetector for pan gestures - handles all swipe actions */}
       <GestureDetector gesture={panGestureModalize}>
@@ -679,11 +704,7 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
             </GestureDetector>
           )}
           <Animated.View style={modalStyle} testID="Modalize.Content(Animated.View)">
-            <Handle
-              withHandle={withHandle}
-              handlePosition={handlePosition}
-              handleStyle={handleStyle}
-            />
+            {withHandle && <Handle handlePosition={handlePosition} handleStyle={handleStyle} />}
             <View
               style={childrenStyle}
               onLayout={handleChildrenLayout}
@@ -696,12 +717,6 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
       </GestureDetector>
     </View>
   );
-
-  if (!isVisible) {
-    return null;
-  }
-
-  return renderModalize;
 };
 
 export { ModalizeProps } from './options';
