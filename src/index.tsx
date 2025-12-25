@@ -7,7 +7,7 @@ import { BackHandler, View, type NativeEventSubscription } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   Easing,
-  runOnJS,
+  runOnJS as runOnJSThread,
   useAnimatedStyle,
   useDerivedValue,
   useSharedValue,
@@ -236,24 +236,24 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
   const overdragHeightIncr = useSharedValue(0); // Track height increase during overdrag
   const animiatedTranslateY = useSharedValue(screenHeight);
 
-  const handleWillCloseOnJS = useCallback(() => {
+  const handleWillCloseOnJSThread = useCallback(() => {
     onWillClose?.();
     setInternalIsOpen(false);
   }, [onWillClose]);
 
-  const handleDidCloseOnJS = useCallback(() => {
+  const handleDidCloseOnJSThread = useCallback(() => {
     setIsVisible(false);
     setIsAnimating(false);
     onDidClose?.();
   }, [onDidClose]);
 
-  const handleAnimateCloseOnUI = useCallback((): void => {
+  const handleAnimateCloseOnUIThread = useCallback((): void => {
     'worklet';
 
-    runOnJS(handleWillCloseOnJS)();
+    runOnJSThread(handleWillCloseOnJSThread)();
 
     // Set animation state to prevent double animations
-    runOnJS(setIsAnimating)(true);
+    runOnJSThread(setIsAnimating)(true);
 
     cancelTranslateY.value = 1;
 
@@ -280,7 +280,7 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
       finished => {
         'worklet';
         if (finished) {
-          runOnJS(handleDidCloseOnJS)();
+          runOnJSThread(handleDidCloseOnJSThread)();
         }
       },
     );
@@ -301,25 +301,25 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
     if (onBackButtonPress) {
       return onBackButtonPress();
     } else {
-      handleAnimateCloseOnUI();
+      handleAnimateCloseOnUIThread();
     }
 
     return true;
-  }, [onBackButtonPress, handleAnimateCloseOnUI]);
+  }, [onBackButtonPress, handleAnimateCloseOnUIThread]);
 
-  const handleWillOpenOnJS = useCallback(() => {
+  const handleWillOpenOnJSThread = useCallback(() => {
     onWillOpen?.();
     setInternalIsOpen(true);
     setIsAnimating(true);
     setIsVisible(true);
   }, [onWillOpen]);
 
-  const handleDidOpenOnJS = useCallback(() => {
+  const handleDidOpenOnJSThread = useCallback(() => {
     onDidOpen?.();
     setIsAnimating(false);
   }, [onDidOpen]);
 
-  const handleAnimateOpenOnUI = useCallback(
+  const handleAnimateOpenOnUIThread = useCallback(
     (): void => {
       'worklet';
 
@@ -347,7 +347,7 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
 
       lastSnap.value = toValue;
 
-      runOnJS(handleWillOpenOnJS)();
+      runOnJSThread(handleWillOpenOnJSThread)();
 
       overlay.value = withTiming(1, {
         duration: openAnimationDuration,
@@ -363,7 +363,7 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
         finished => {
           'worklet';
           if (finished) {
-            runOnJS(handleDidOpenOnJS)();
+            runOnJSThread(handleDidOpenOnJSThread)();
           }
         },
       );
@@ -388,7 +388,7 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
       childContentHeight.value = event.nativeEvent.layout.height;
 
       if (onLayout) {
-        runOnJS(onLayout)(event);
+        runOnJSThread(onLayout)(event);
       }
     },
     [onLayout],
@@ -407,7 +407,7 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
         'worklet';
 
         // Handle pan begin for main modalize
-        runOnJS(setCancelClose)(false);
+        runOnJSThread(setCancelClose)(false);
 
         // Reset animation values at the start of each gesture
         dragY.value = 0;
@@ -466,7 +466,7 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
           } else {
             // Uncontrolled component - close the modal
             willCloseModalize = true;
-            handleAnimateCloseOnUI();
+            handleAnimateCloseOnUIThread();
           }
         } else {
           // Snap to snap point or full open - don't close
@@ -515,7 +515,7 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
     cancelClose,
     dragToss,
     processedSnapPoints,
-    handleAnimateCloseOnUI,
+    handleAnimateCloseOnUIThread,
     enableOverdrag,
     overdragResistance,
     overdragBounceDuration,
@@ -530,13 +530,13 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
           'worklet';
 
           if (onOverlayPress) {
-            runOnJS(onOverlayPress)();
+            runOnJSThread(onOverlayPress)();
           }
 
-          handleAnimateCloseOnUI();
+          handleAnimateCloseOnUIThread();
         })
         .requireExternalGestureToFail(panGestureModalize),
-    [closeOnOverlayTap, onOverlayPress, handleAnimateCloseOnUI, panGestureModalize],
+    [closeOnOverlayTap, onOverlayPress, handleAnimateCloseOnUIThread, panGestureModalize],
   );
 
   // Separate gesture detectors:
@@ -552,7 +552,7 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
           return;
         }
 
-        handleAnimateOpenOnUI();
+        handleAnimateOpenOnUIThread();
       },
 
       close() {
@@ -561,10 +561,10 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
           return;
         }
 
-        handleAnimateCloseOnUI();
+        handleAnimateCloseOnUIThread();
       },
     }),
-    [isAnimating, handleAnimateOpenOnUI, handleAnimateCloseOnUI],
+    [isAnimating, handleAnimateOpenOnUIThread, handleAnimateCloseOnUIThread],
   );
 
   React.useEffect(() => {
@@ -574,11 +574,11 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
     }
 
     if (isOpen && !isVisible) {
-      handleAnimateOpenOnUI();
+      handleAnimateOpenOnUIThread();
     } else if (!isOpen && isVisible) {
-      handleAnimateCloseOnUI();
+      handleAnimateCloseOnUIThread();
     }
-  }, [isOpen, isVisible, isAnimating, handleAnimateOpenOnUI, handleAnimateCloseOnUI]);
+  }, [isOpen, isVisible, isAnimating, handleAnimateOpenOnUIThread, handleAnimateCloseOnUIThread]);
 
   // Manage back button listener based on visibility
   React.useEffect(() => {
