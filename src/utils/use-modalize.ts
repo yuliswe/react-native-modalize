@@ -1,14 +1,10 @@
 import { useCallback, useRef } from 'react';
-import { TOpen } from '../options';
 
 export interface ModalizeRef {
   /**
    * Method to open Modalize.
-   *
-   * If you are using `snapPoint` prop, you can supply a `dest` argument to the `open` method, to open it
-   * to the top directly `open('top')`. You don't have to provide anything if you want the default behavior.
    */
-  open(dest?: TOpen): void;
+  open(): void;
 
   /**
    * The method to close Modalize. You don't need to call it to dismiss the modal, since you can swipe down to dismiss.
@@ -23,8 +19,8 @@ export const useModalizeRef = () => {
     ref.current?.close();
   }, []);
 
-  const open = useCallback((dest?: TOpen) => {
-    ref.current?.open(dest);
+  const open = useCallback(() => {
+    ref.current?.open();
   }, []);
 
   return { ref, open, close };

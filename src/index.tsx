@@ -14,7 +14,7 @@ import Animated, {
   withTiming,
   type SharedValue,
 } from 'react-native-reanimated';
-import { ModalizeProps, TOpen, TStyle } from './options';
+import { ModalizeProps, TStyle } from './options';
 import { default as s } from './styles';
 import { LayoutEvent, PanGestureEvent, PanGestureStateEvent } from './types';
 import { useDimensions } from './utils/use-dimensions';
@@ -161,7 +161,6 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
     onWillClose,
     onDidClose,
     onBackButtonPress,
-    onPositionChange,
     onOverlayPress,
     onLayout,
   } = props;
@@ -187,7 +186,7 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
   }, [screenHeight, modalTopOffset]);
 
   // UI thread only states - moved to shared values
-  const lastSnap = useSharedValue(0);
+  const lastSnap = useSharedValue(-1);
 
   const childContentHeight = useSharedValue<number | null>(null);
 
@@ -321,15 +320,16 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
   }, [onDidOpen]);
 
   const handleAnimateOpenOnUI = useCallback(
-    (dest: TOpen = 'default'): void => {
+    (): void => {
       'worklet';
 
       let toValue = 0;
 
       const snaps = processedSnapPoints.value;
+      const shouldUseLastSnap = lastSnap.value !== -1;
 
-      if (dest === 'top') {
-        toValue = 0;
+      if (shouldUseLastSnap) {
+        toValue = lastSnap.value;
       } else if (snaps && snaps.length > 0) {
         // Use childContentHeight if available, otherwise fall back to availableScreenHeight
         const contentHeight =
@@ -495,11 +495,6 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
 
           lastSnap.value = bounceTarget;
 
-          const isTop = bounceTarget <= 0;
-          if (onPositionChange && wasTop !== isTop) {
-            runOnJS(onPositionChange)(isTop ? 'top' : 'initial');
-          }
-
           return;
         }
         // Update lastSnap to the destination snap point for next gesture
@@ -510,12 +505,6 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
           duration: DEFAULT_SNAP_ANIMATION_DURATION,
           easing: DEFAULT_SNAP_ANIMATION_EASING,
         });
-
-        const isTop = destSnapPoint <= 0;
-
-        if (onPositionChange && wasTop !== isTop) {
-          runOnJS(onPositionChange)(isTop ? 'top' : 'initial');
-        }
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
@@ -527,7 +516,6 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
     dragToss,
     processedSnapPoints,
     handleAnimateCloseOnUI,
-    onPositionChange,
     enableOverdrag,
     overdragResistance,
     overdragBounceDuration,
@@ -558,13 +546,13 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
   React.useImperativeHandle(
     ref,
     () => ({
-      open(dest?: TOpen) {
+      open() {
         // Prevent opening if already animating
         if (isAnimating) {
           return;
         }
 
-        handleAnimateOpenOnUI(dest);
+        handleAnimateOpenOnUI();
       },
 
       close() {

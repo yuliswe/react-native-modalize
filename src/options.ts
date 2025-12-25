@@ -8,8 +8,6 @@ import {
 import { EasingFunction } from 'react-native-reanimated';
 import { LayoutEvent } from './types';
 
-export type TOpen = 'default' | 'top';
-export type TPosition = 'initial' | 'top';
 export type TStyle = StyleProp<ViewStyle>;
 
 export interface ITimingProps {
@@ -279,13 +277,6 @@ export interface ModalizeProps<ListItem = any> {
    * but you will have to close the modal by yourself.
    */
   onBackButtonPress?(): boolean;
-
-  /**
-   * Callback function which determines if the modal has reached the top
-   * i.e. completely opened to modal/screen height, or is at the initial
-   * point (snapPoint or alwaysOpened height).
-   */
-  onPositionChange?: (position: 'top' | 'initial') => void;
 
   /**
    * Callback used when you press the overlay.
