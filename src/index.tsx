@@ -2,8 +2,14 @@
  * esModuleInterop: true looks to work everywhere except
  * on snack.expo for some reason. Will revisit this later.
  */
-import React, { useCallback, useMemo } from 'react';
-import { BackHandler, View, type NativeEventSubscription } from 'react-native';
+import React, { useCallback, useMemo, useState } from 'react';
+import {
+  BackHandler,
+  StyleProp,
+  View,
+  ViewStyle,
+  type NativeEventSubscription,
+} from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   Easing,
@@ -14,13 +20,12 @@ import Animated, {
   withTiming,
   type SharedValue,
 } from 'react-native-reanimated';
-import { InitialSnapPointIndex, ModalizeProps, TStyle } from './options';
+import { InitialSnapPointIndex, ModalizeProps } from './options';
 import { default as s } from './styles';
 import { LayoutEvent, PanGestureEvent, PanGestureStateEvent } from './types';
 import { useDimensions } from './utils/use-dimensions';
 import type { ModalizeRef } from './utils/use-modalize';
 import { useKeyboardHeight } from './utils/useKeyboardHeight';
-import { useStateWithSharedValue } from './utils/useStateWithSharedValue';
 
 // Animation constants
 const DEFAULT_OPEN_ANIMATION_DURATION = 280;
@@ -58,12 +63,12 @@ const calculateOverdragResistance = (offset: number, resistance: number): number
 
 interface HandleProps {
   handlePosition: 'inside' | 'outside';
-  handleStyle?: TStyle;
+  handleStyle?: StyleProp<ViewStyle>;
 }
 
 function HandleComponent({ handlePosition, handleStyle }: HandleProps) {
-  const handleStyles: (TStyle | undefined)[] = [s.handle];
-  const shapeStyles: (TStyle | undefined)[] = [s.handle__shape, handleStyle];
+  const handleStyles: (StyleProp<ViewStyle> | undefined)[] = [s.handle];
+  const shapeStyles: (StyleProp<ViewStyle> | undefined)[] = [s.handle__shape, handleStyle];
   const isHandleOutside = handlePosition === 'outside';
 
   if (!isHandleOutside) {
@@ -81,7 +86,7 @@ function HandleComponent({ handlePosition, handleStyle }: HandleProps) {
 const Handle = React.memo(HandleComponent);
 
 interface OverlayProps {
-  overlayStyle?: TStyle;
+  overlayStyle?: StyleProp<ViewStyle>;
   overlay?: SharedValue<number>;
 }
 
@@ -107,7 +112,7 @@ const Overlay = React.memo(OverlayComponent);
 const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
   // eslint-disable-next-line @typescript-eslint/unbound-method
   const {
-    testID,
+    testID = 'Modalize',
 
     // Renderers
     children,
@@ -222,15 +227,15 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
   }, [props.snapPoints, childContentHeight, availableScreenHeight]);
 
   // JS thread states - optimized with useMemo for initial values
-  const [isVisible, setIsVisible, isVisibleShared] = useStateWithSharedValue(false);
+  const [isVisible, setIsVisible] = useState(false);
 
-  const [internalIsOpen, setInternalIsOpen, _internalIsOpenShared] = useStateWithSharedValue(true);
+  const [internalIsOpen, setInternalIsOpen] = useState(true);
   const isOpen = externalIsOpen ?? internalIsOpen;
 
-  const [cancelClose, setCancelClose, _cancelCloseShared] = useStateWithSharedValue(false);
+  const [cancelClose, setCancelClose] = useState(false);
 
   // Animation state tracking to prevent double animations
-  const [isAnimating, setIsAnimating, isAnimatingShared] = useStateWithSharedValue(false);
+  const [isAnimating, setIsAnimating] = useState(false);
 
   const cancelTranslateY = useSharedValue(1); // 1 by default to have the translateY animation running
   const overlay = useSharedValue(0);
@@ -391,6 +396,7 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
 
     handleWillOpenOnJSThread();
 
+    // Wait for the layout event to assign the content height
     while (childContentHeight.value === null) {
       await new Promise(resolve => setTimeout(resolve, 1));
     }
@@ -409,7 +415,6 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
       const height = event.nativeEvent.layout.height;
       childContentHeight.value = height;
 
-      console.log('childContentHeight', height, childContentHeight.value);
       onLayout?.(event);
     },
     [onLayout, childContentHeight],
@@ -658,10 +663,6 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
       externalTranslateY.value = 1 - finalTranslateY / availableScreenHeight.value;
     }
 
-    console.log('finalTranslateY', finalTranslateY);
-    console.log('childContentHeight.value', childContentHeight.value);
-    console.log('keyboardHeight.value', keyboardHeight.value);
-
     return {
       transform: [{ translateY: finalTranslateY }],
       height:
@@ -703,7 +704,11 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
   // only use padding in the children. Do not use margin. This is the only way
   // to make the layout calculated correctly.
   return (
-    <View style={rootStyleMemo} pointerEvents={!withOverlay ? 'box-none' : 'auto'}>
+    <View
+      style={rootStyleMemo}
+      pointerEvents={!withOverlay ? 'box-none' : 'auto'}
+      testID={`${testID}.View`}
+    >
       {/* GestureDetector for pan gestures - handles all swipe actions */}
       <GestureDetector gesture={panGestureModalize}>
         <View style={s.modalize__wrapper} pointerEvents="box-none">
