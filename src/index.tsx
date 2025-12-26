@@ -208,14 +208,16 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
     }
     // Convert snap points (heights) to actual distances (translateY) and sort
     return Array.from(
-      new Set([
-        // Always add fully open and closed
-        0, // Open
-        contentHeight, // Closed
-        ...props.snapPoints,
-      ]),
+      new Set(
+        props.snapPoints
+          .map(val => contentHeight - Math.min(contentHeight, Math.max(val, 0)))
+          .concat([
+            0, // Open
+            props.alwaysOpen ? 0 : contentHeight, // Closed
+          ]),
+      ),
     )
-      .map(val => contentHeight - Math.min(contentHeight, Math.max(val, 0)))
+
       .sort((a, b) => a - b);
   }, [props.snapPoints, childContentHeight, availableScreenHeight]);
 
