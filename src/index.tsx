@@ -409,6 +409,7 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
       const height = event.nativeEvent.layout.height;
       childContentHeight.value = height;
 
+      console.log('childContentHeight', height, childContentHeight.value);
       onLayout?.(event);
     },
     [onLayout, childContentHeight],
@@ -630,7 +631,7 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
     }
 
     // Calculate the base translateY value
-    const draggedAndAnimiatedY = (targetTranslateY.value + dragY.value) * cancelTranslateY.value;
+    const draggedAndAnimatedY = (targetTranslateY.value + dragY.value) * cancelTranslateY.value;
 
     let finalTranslateY: number;
     let heightIncrease = 0;
@@ -639,15 +640,15 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
     const topBound = -keyboardHeight.value;
 
     // Check if we're in overdrag territory
-    if (draggedAndAnimiatedY < topBound) {
+    if (draggedAndAnimatedY < topBound) {
       // Overdrag upward (above top bound) - increase height instead of moving up
-      const overdragOffset = draggedAndAnimiatedY - topBound;
+      const overdragOffset = draggedAndAnimatedY - topBound;
       const resistedOffset = calculateOverdragResistance(overdragOffset, overdragResistance);
       finalTranslateY = topBound; // Keep modal at top bound
       heightIncrease = Math.abs(resistedOffset); // Convert to positive height increase
     } else {
       // Within normal bounds
-      finalTranslateY = draggedAndAnimiatedY;
+      finalTranslateY = draggedAndAnimatedY;
     }
 
     // Update the shared value for height increase
@@ -658,6 +659,8 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
     }
 
     console.log('finalTranslateY', finalTranslateY);
+    console.log('childContentHeight.value', childContentHeight.value);
+    console.log('keyboardHeight.value', keyboardHeight.value);
 
     return {
       transform: [{ translateY: finalTranslateY }],
@@ -673,30 +676,34 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
     return [s.modalStyle, props.modalStyle, animatedModalStyle];
   }, [props.modalStyle, animatedModalStyle]);
 
+  const animatedChildrenStyle = useAnimatedStyle(() => {
+    return {
+      maxHeight: availableScreenHeight.value,
+    };
+  });
+
   const childrenStyle = useMemo(() => {
     return [
       s.childrenStyle,
       props.childrenStyle,
       {
         width: screenWidth,
-        maxHeight: availableScreenHeight.value,
       },
+      animatedChildrenStyle,
     ];
-  }, [props.childrenStyle, screenWidth, availableScreenHeight.value]);
+  }, [props.childrenStyle, screenWidth, animatedChildrenStyle]);
+
+  const rootStyleMemo = useMemo(() => [s.modalize, rootStyle], [rootStyle]);
 
   if (!isVisible) {
     return null;
   }
 
-  console.log('isVisible', isVisible);
-  console.log('modalStyle', modalStyle);
-  console.log('animatedModalStyle.transform', animatedModalStyle.transform);
-
   // Make sure the children height is exactly the same as the modal height. Ie,
   // only use padding in the children. Do not use margin. This is the only way
   // to make the layout calculated correctly.
   return (
-    <View style={[s.modalize, rootStyle]} pointerEvents={!withOverlay ? 'box-none' : 'auto'}>
+    <View style={rootStyleMemo} pointerEvents={!withOverlay ? 'box-none' : 'auto'}>
       {/* GestureDetector for pan gestures - handles all swipe actions */}
       <GestureDetector gesture={panGestureModalize}>
         <View style={s.modalize__wrapper} pointerEvents="box-none">
@@ -707,13 +714,13 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
           )}
           <Animated.View style={modalStyle} testID="Modalize.Content(Animated.View)">
             {withHandle && <Handle handlePosition={handlePosition} handleStyle={handleStyle} />}
-            <View
+            <Animated.View
               style={childrenStyle}
               onLayout={handleChildrenLayout}
               testID="Modalize.Content.View.Children"
             >
               {children}
-            </View>
+            </Animated.View>
           </Animated.View>
         </View>
       </GestureDetector>
