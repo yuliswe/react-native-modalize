@@ -180,7 +180,7 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
     return avoidKeyboardShared.value ? rawKeyboardHeight.value : 0;
   }, [avoidKeyboardShared, rawKeyboardHeight]);
 
-  /** Height available for the modal after accounting for top offset (status bar, etc.) */
+  /** Height available for the modal after accounting for top offset, status bar, and keyboard. */
   const availableScreenHeight = useDerivedValue(() => {
     'worklet';
     return screenHeight - modalTopOffset - (avoidKeyboardShared.value ? keyboardHeight.value : 0);
@@ -191,8 +191,17 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
 
   const childContentHeight = useSharedValue<number | null>(null);
 
+  /**
+   * The maximum height the modal can be, accounting for the available screen
+   * height and the child content height.
+   */
+  const maxPossibleModalHeight = useDerivedValue(() => {
+    'worklet';
+    return Math.min(availableScreenHeight.value, childContentHeight.value ?? Infinity);
+  }, [availableScreenHeight, childContentHeight]);
+
   /** Snap points: [closed, snapPoints..., fullOpen] or [closed, fullOpen] */
-  const processedSnapPointsY = useDerivedValue(() => {
+  const snapPointTranslateYs = useDerivedValue(() => {
     'worklet';
 
     const contentHeight = childContentHeight.value;
@@ -298,7 +307,7 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
     closeAnimationDelay,
     closeAnimationIsInteraction,
     props.snapPoints,
-    processedSnapPointsY,
+    snapPointTranslateYs,
     screenHeight,
     onDidClose,
     onWillClose,
@@ -338,7 +347,7 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
 
       let toValueY = 0;
 
-      const snapsY = processedSnapPointsY.value;
+      const snapsY = snapPointTranslateYs.value;
       const shouldUseLastSnap = lastSnapY.value !== -1;
 
       if (shouldUseLastSnap) {
@@ -381,7 +390,7 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
       openAnimationEasing,
       openAnimationDelay,
       openAnimationIsInteraction,
-      processedSnapPointsY.value,
+      snapPointTranslateYs.value,
       props.snapPoints?.length,
       initialSnapPointIndex,
       availableScreenHeight,
@@ -458,7 +467,7 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
         const endOffsetY = lastSnapY.value + translationY + dragToss * velocityY;
 
         // Get current snaps array (always available, defaults to [0, contentHeight] when no snapPoints)
-        const snapsY = processedSnapPointsY.value;
+        const snapsY = snapPointTranslateYs.value;
 
         // Find the nearest snap point with optimized search
         let nearestSnapY = snapsY[0];
@@ -539,7 +548,7 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
     props.snapPoints,
     cancelClose,
     dragToss,
-    processedSnapPointsY,
+    snapPointTranslateYs,
     startAnimateCloseOnUIThread,
     enableOverdrag,
     overdragResistance,
@@ -660,16 +669,12 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
     overdragHeightIncr.value = heightIncrease;
 
     if (externalTranslateY) {
-      externalTranslateY.value = 1 - finalTranslateY / availableScreenHeight.value;
+      externalTranslateY.value = 1 - finalTranslateY / maxPossibleModalHeight.value;
     }
 
     return {
       transform: [{ translateY: finalTranslateY }],
-      height:
-        childContentHeight.value === null
-          ? availableScreenHeight.value
-          : Math.min(childContentHeight.value + keyboardHeight.value, screenHeight) +
-            heightIncrease,
+      height: maxPossibleModalHeight.value + heightIncrease,
     };
   }, []);
 
