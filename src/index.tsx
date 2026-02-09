@@ -2,7 +2,7 @@
  * esModuleInterop: true looks to work everywhere except
  * on snack.expo for some reason. Will revisit this later.
  */
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   BackHandler,
   StyleProp,
@@ -126,6 +126,7 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
     initialSnapPointIndex = InitialSnapPointIndex.FullyOpen,
     modalTopOffset = 0,
     isOpen: externalIsOpen,
+    sizing = 'hug-content',
 
     // Options
     handlePosition = 'outside',
@@ -189,7 +190,17 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
   // UI thread only states - moved to shared values
   const lastSnapY = useSharedValue(-1);
 
-  const childContentHeight = useSharedValue<number | null>(null);
+  // If sizing provides a fixed contentHeight, use it directly. Otherwise, wait for measurement.
+  const childContentHeight = useSharedValue<number | null>(
+    sizing !== 'hug-content' ? sizing.contentHeight : null,
+  );
+
+  // Sync childContentHeight when sizing prop changes
+  useEffect(() => {
+    if (sizing !== 'hug-content') {
+      childContentHeight.value = sizing.contentHeight;
+    }
+  }, [sizing, childContentHeight]);
 
   /**
    * The maximum height the modal can be, accounting for the available screen
@@ -421,12 +432,15 @@ const ModalizeBase = (props: ModalizeProps, ref: React.Ref<ModalizeRef>) => {
 
   const handleChildrenLayout = useCallback(
     (event: LayoutEvent): void => {
-      const height = event.nativeEvent.layout.height;
-      childContentHeight.value = height;
+      // Only measure content height when using 'hug-content' sizing mode
+      if (sizing === 'hug-content') {
+        const height = event.nativeEvent.layout.height;
+        childContentHeight.value = height;
+      }
 
       onLayout?.(event);
     },
-    [onLayout, childContentHeight],
+    [onLayout, childContentHeight, sizing],
   );
 
   // V2 Gesture definitions with proper composition

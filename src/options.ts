@@ -54,6 +54,11 @@ export interface ModalizeProps<ListItem = any> {
   modalStyle?: TStyle;
 
   /**
+   * Define the sizing of the modal.
+   */
+  sizing?: 'hug-content' | { contentHeight: number };
+
+  /**
    * Define the style of the handle on top of the modal.
    */
   handleStyle?: TStyle;
